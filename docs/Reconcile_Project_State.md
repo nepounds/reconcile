@@ -10,41 +10,44 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 1 — Create project skeleton and tooling baseline.
+Current step: Step 2 — Add core exceptions and money helpers.
 
-Status: Step 1 complete.
+Status: Step 2 complete.
 
 Current summary:
 
 * Reconcile has its initial Python package skeleton under `src/reconcile/`.
-* `pyproject.toml` is now the dependency source of truth.
+* `pyproject.toml` is the dependency source of truth.
 * Development tooling is limited to pytest and ruff.
-* The package import smoke test passes.
+* The package import smoke test passed in Step 1.
 * Fake demo input CSV files exist for the chart of accounts, journal entries, and bank statement.
-* Placeholder output folders exist for `examples/sample_output/` and `exports/`.
-* No accounting engine implementation has started yet.
+* Step 2 added the custom exception hierarchy and integer-cents money helpers.
+* Money parsing and formatting now avoid floats and fail invalid inputs with `MoneyError`.
+* No accounts, journal entries, event storage, reports, reconciliation, categorization, or dashboard work has started yet.
 
-Completed Step 1 files:
+Completed Step 2 files:
 
 ```text
-.gitignore
-.python-version
-pyproject.toml
-src/reconcile/__init__.py
-tests/test_package_import.py
-examples/demo_company/chart_of_accounts.csv
-examples/demo_company/journal_entries.csv
-examples/demo_company/bank_statement.csv
-examples/sample_output/.gitkeep
-exports/.gitkeep
+src/reconcile/exceptions.py
+src/reconcile/money.py
+tests/test_money.py
 docs/Reconcile_Project_State.md
 ```
 
-Commands run for Step 1:
+Completed Step 2 summary:
+
+* Added `ReconcileError`, `ValidationError`, and `MoneyError`.
+* Added `parse_money_to_cents(value: str) -> int`.
+* Added `format_cents(cents: int) -> str`.
+* Supported whole dollars, decimals, negative amounts, commas, currency symbols, surrounding whitespace, zero, and one-cent values.
+* Rejected blank strings, non-string parse inputs, invalid numeric text, malformed commas, currency-symbol-only values, and more than two decimal places.
+* Rejected non-int formatting inputs and rejected bool values even though bool subclasses int.
+* Added focused money tests covering happy paths, bad inputs, edge cases, and the custom exception hierarchy.
+
+Commands run for Step 2:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m pytest
+PYTHONPATH=src python -m pytest
 python -m ruff check .
 git status
 ```
@@ -52,26 +55,24 @@ git status
 Results in this sandbox:
 
 ```text
-python -m pip install -e ".[dev]"  # success
-python -m pytest                    # 2 passed
-python -m ruff check .              # All checks passed!
+PYTHONPATH=src python -m pytest     # 31 passed
+python -m ruff check .              # failed: No module named ruff in this sandbox environment
 git status                          # fatal: not a git repository (or any of the parent directories): .git
 ```
 
-Step 2 status: Not started.
+Step 3 status: Not started.
 
 Next planned step:
 
-Step 2 — Add core exceptions and money helpers.
+Step 3 — Add account models and chart of accounts validation.
 
-Expected Step 2 work:
+Expected Step 3 work:
 
-* Add custom project exceptions.
-* Add safe money parsing and formatting helpers.
-* Convert dollar strings to integer cents.
-* Convert integer cents to display strings.
-* Reject invalid money values clearly.
-* Keep tests focused and offline.
+* Add account types.
+* Add normal balance rules.
+* Add account model.
+* Validate account code, name, type, and normal balance.
+* Add tests for valid and invalid accounts.
 
 ---
 
@@ -2131,23 +2132,34 @@ Add Reconcile project skeleton and tooling baseline
 
 ### Step 2 — Add core exceptions and money helpers
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Add custom exceptions and safe money parsing/formatting utilities.
 
-Expected work:
+Completed work:
 
-* Add `exceptions.py`.
-* Add `money.py`.
-* Implement conversion from dollars string to integer cents.
-* Implement conversion from cents to display string.
-* Reject invalid money values.
-* Avoid floats for money.
-* Add focused tests.
+* Added `src/reconcile/exceptions.py` with the custom exception hierarchy:
 
-Allowed files to create/edit:
+  * `ReconcileError` inherits from `Exception`.
+  * `ValidationError` inherits from `ReconcileError`.
+  * `MoneyError` inherits from `ValidationError`.
+
+* Added `src/reconcile/money.py` with integer-cents helpers:
+
+  * `parse_money_to_cents(value: str) -> int`
+  * `format_cents(cents: int) -> str`
+
+* Implemented money parsing without floats.
+* Supported valid whole-dollar, decimal, negative, comma, currency-symbol, whitespace, zero, and one-cent values.
+* Rejected blank strings, non-string values, invalid numeric text, malformed comma text, currency-symbol-only values, and values with more than two decimal places.
+* Implemented cents formatting with two decimals.
+* Rejected bool, float, string, `Decimal`, and other non-int formatting values.
+* Added focused tests in `tests/test_money.py`.
+* Did not add accounts, journal entries, event storage, reports, reconciliation, categorization, or dashboard work.
+
+Files created or edited:
 
 ```text
 src/reconcile/exceptions.py
@@ -2156,28 +2168,30 @@ tests/test_money.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Accounts
-* Journal entries
-* Event store
-* Reports
-* Reconciliation
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
+PYTHONPATH=src python -m pytest
 python -m ruff check .
+git status
+```
+
+Results in this sandbox:
+
+```text
+PYTHONPATH=src python -m pytest     # 31 passed
+python -m ruff check .              # failed: No module named ruff in this sandbox environment
+git status                          # fatal: not a git repository (or any of the parent directories): .git
 ```
 
 Definition of done:
 
 * Money parsing works.
 * Money formatting works.
-* Bad money inputs fail clearly.
-* Tests pass.
-* Ruff passes.
+* Bad money inputs fail clearly with `MoneyError`.
+* Tests pass in this sandbox.
+* Ruff could not be run in this sandbox because `ruff` is not installed here; run it in the project virtual environment where Step 1 installed dev dependencies.
+* Project State updated.
 
 Suggested commit message:
 
