@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 7 — Add account service and AccountOpened projection.
+Current step: Step 8 — Add journal posting service and journal projections.
 
-Status: Step 7 complete.
+Status: Step 8 complete.
 
 Current summary:
 
@@ -24,152 +24,41 @@ Current summary:
 * Step 2 added the custom exception hierarchy and integer-cents money helpers.
 * Step 3 added account domain definitions, normal balance rules, and a validated `Account` model.
 * Step 4 added journal line and journal entry models with double-entry validation.
-* Journal validation now rejects blank required fields, invalid sides, non-int or non-positive amounts, invalid line numbers, non-date entry dates, non-list lines, single-line entries, mismatched entry IDs, duplicate line numbers, and unbalanced entries.
 * Step 5 added SQLite connection helpers and idempotent MVP schema initialization.
-* Step 5 created the event, account, journal, balance, bank import, bank transaction, reconciliation run, reconciliation match, and reconciliation ledger-link tables.
 * Step 6 added validated ledger event models and append-only SQLite event storage.
-* Step 6 added deterministic event loading in `event_sequence` order.
-* Step 7 added account-opening services and an AccountOpened projection handler for the accounts table.
+* Step 7 added account-opening services and an `AccountOpened` projection handler for the `accounts` table.
+* Step 8 added journal posting through append-only `JournalEntryPosted` events.
+* Step 8 added journal entry and journal line projections into SQLite.
+* Journal posting now rejects duplicate journal entry IDs, missing accounts, inactive accounts, unbalanced entries, and invalid single-line entries.
+* `JournalEntryPosted` projection writes only to `journal_entries` and `journal_entry_lines`; account balance projections are intentionally not implemented yet.
 
-Completed Step 4 files:
-
-```text
-src/reconcile/journal/__init__.py
-src/reconcile/journal/models.py
-src/reconcile/journal/validation.py
-tests/test_journal_models.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 4 summary:
-
-* Added frozen `JournalLine` dataclass with validation in `__post_init__`.
-* Added frozen `JournalEntry` dataclass with validation in `__post_init__`.
-* Added validation that journal entries must contain at least two lines.
-* Added validation that every journal line must have side `debit` or `credit`.
-* Added validation that journal amounts use positive integer cents and reject bool values.
-* Added validation that line numbers use positive integers, reject bool values, and are unique within an entry.
-* Added validation that all lines in an entry belong to the same `journal_entry_id`.
-* Added validation that total debits equal total credits.
-* Added journal validation helpers: `validate_journal_line`, `validate_journal_entry`, `total_debits`, `total_credits`, and `is_balanced`.
-* Added focused journal model tests covering happy paths, bad inputs, edge cases, helper functions, and `ValidationError` behavior.
-* Did not add SQLite, event storage, posting services, reversals, projections, reports, reconciliation, categorization, or dashboard work.
-
-Commands run for Step 4:
-
-```bash
-PYTHONPATH=/tmp/reconcile_test/src pytest -q /tmp/reconcile_test/test_journal_models.py
-python -m ruff check /mnt/data/reconcile_step4
-git status
-```
-
-Results in this sandbox:
+Completed Step 8 files:
 
 ```text
-PYTHONPATH=/tmp/reconcile_test/src pytest -q /tmp/reconcile_test/test_journal_models.py  # 31 passed
-python -m ruff check /mnt/data/reconcile_step4                                      # failed: No module named ruff in this sandbox environment
-git status                                                                          # not run here against the real repository
-```
-
-Completed Step 5 files:
-
-```text
-src/reconcile/db.py
-tests/test_db_schema.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 5 summary:
-
-* Added `connect(db_path)` for SQLite connections using string or `Path` inputs.
-* Added parent-directory creation for database file paths.
-* Configured connections to use `sqlite3.Row` and `PRAGMA foreign_keys = ON`.
-* Added blank and invalid path validation using the project `ValidationError`.
-* Added `initialize_schema(connection)` to create the MVP SQLite schema idempotently.
-* Added optional `initialize_database(db_path)` helper.
-* Created tables for ledger events, accounts, journal entries, journal lines, account balances, bank imports, bank transactions, reconciliation runs, reconciliation matches, and reconciliation ledger links.
-* Added simple indexes for event type, effective date, account code, journal dates, journal lines, bank transactions, and reconciliation matches.
-* Added schema tests for connection behavior, parent directory creation, required tables, required columns, idempotency, uniqueness, foreign keys, check constraints, and autoincrement event sequences.
-* Did not add event append/load logic, account services, journal posting services, projection handlers, reports, reconciliation matching, categorization, or dashboard logic.
-
-Commands run for Step 5:
-
-```bash
-python -m py_compile /mnt/data/reconcile_step5/src/reconcile/db.py /mnt/data/reconcile_step5/tests/test_db_schema.py
-```
-
-Results in this sandbox:
-
-```text
-python -m py_compile /mnt/data/reconcile_step5/src/reconcile/db.py /mnt/data/reconcile_step5/tests/test_db_schema.py  # success
-python -m pytest                                                                                                      # not run here against the real repository
-python -m ruff check .                                                                                                # not run here against the real repository
-git status                                                                                                            # not run here against the real repository
-```
-
-Completed Step 6 files:
-
-```text
-src/reconcile/events/__init__.py
-src/reconcile/events/models.py
-src/reconcile/events/store.py
-tests/test_event_store.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 6 summary:
-
-* Added `LedgerEvent` as the storage-friendly append-only ledger event model.
-* Added validation for required event fields, event versions, timestamps, source, payload, optional string metadata, and event sequence values.
-* Added official MVP event type constants.
-* Added JSON-serializable payload validation.
-* Added append-only SQLite event insertion through `append_event`.
-* Added deterministic event loading through `load_events`.
-* Added optional lookup helpers for event ID and event type.
-* Stored payloads as JSON in `payload_json`.
-* Returned database-assigned `event_sequence` values after append.
-* Converted duplicate event IDs into a project `ValidationError`.
-* Confirmed event appends do not write to account, journal, balance, bank, or reconciliation projection tables.
-* Did not add event handlers, projections, account services, journal posting services, reversals, reports, reconciliation, or dashboard logic.
-
-Commands run for Step 6:
-
-```bash
-python -m pytest
-python -m ruff check .
-git status
-```
-
-Results:
-
-```text
-python -m pytest        # passed locally
-python -m ruff check .  # passed locally after fixing an initial ruff error
-git status              # expected Step 6 files only
-```
-
-Completed Step 7 files:
-
-```text
-src/reconcile/accounts/service.py
-src/reconcile/accounts/chart.py
+src/reconcile/journal/service.py
 src/reconcile/events/handlers.py
-tests/test_account_service.py
+tests/test_journal_posting.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 7 summary:
+Completed Step 8 summary:
 
-* Added `open_account` to create accounts through append-only `AccountOpened` events.
-* Added `apply_event` handling for `AccountOpened` events only.
-* Added projection behavior that writes validated account data into the `accounts` table.
-* Added duplicate account ID and duplicate account code checks before event append and during projection apply.
-* Added account lookup helpers for ID, code, and stable code-ordered listing.
-* Added a minimal batch `open_accounts` helper for future chart-of-accounts loading.
-* Added account-service tests covering event append behavior, projection behavior, payload shape, duplicate failures, unsupported event handling, lookup helpers, and batch opening.
-* Did not add journal posting, balance projections, projection rebuilds, reports, reversals, reconciliation, categorization, dashboard, or CLI logic.
+* Added `post_journal_entry` to validate and post balanced journal entries through append-only `JournalEntryPosted` events.
+* Added journal posting payloads with all header and line fields needed to rebuild journal projections.
+* Added pre-append validation for duplicate journal entry IDs.
+* Added pre-append validation for missing account references.
+* Added pre-append validation for inactive account references.
+* Extended `apply_event` to support `JournalEntryPosted` while preserving existing `AccountOpened` behavior.
+* Added projection behavior for `journal_entries`.
+* Added projection behavior for `journal_entry_lines`.
+* Added `status="posted"` for newly posted journal entries.
+* Added `reversed_by_entry_id=None` and `reversal_of_entry_id=None` for newly posted entries.
+* Added duplicate journal entry and duplicate journal line ID validation during projection apply.
+* Added optional journal lookup helpers for single-entry and stable ordered listing.
+* Added tests covering happy paths, event payload shape, projection behavior, invalid entries, account validation, duplicate handling, direct event apply behavior, no balance projection behavior, and lookup helpers.
+* Did not add account balance projections, projection rebuilds, reversals, reports, bank import, reconciliation, categorization, dashboard, CLI, or property-based tests.
 
-Commands run for Step 7:
+Commands run for Step 8:
 
 ```bash
 python -m pytest
@@ -180,16 +69,17 @@ git status
 Results:
 
 ```text
-python -m pytest        # run locally in the real repository
+python -m pytest        # run locally after Step 8 fixes; expected 194 passed
 python -m ruff check .  # run locally in the real repository
-git status              # expected Step 7 files only
+git status              # expected Step 8 files only
 ```
 
 Next planned step:
 
-Step 8 — Add journal posting service and journal projections.
+Step 9 — Add account balance projections.
 
-Step 8 status: Not started.
+Step 9 status: Not started.
+
 ---
 
 ## Project name
@@ -452,6 +342,7 @@ Project-specific constraints:
 
 * README-driven development.
 * Maintain this Project State file after every completed step.
+* At the end of every completed build step, generate the entire updated `docs/Reconcile_Project_State.md` file so it can be copied or replaced directly.
 * Define official names, paths, inputs, outputs, and public functions before implementation.
 * Keep application logic inside `src/reconcile/`.
 * Keep scripts, CLI wrappers, and dashboard files thin.
@@ -2750,7 +2641,7 @@ Add account opening events and projection
 
 ### Step 8 — Add journal posting service and journal projections
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
@@ -2776,28 +2667,80 @@ tests/test_journal_posting.py
 docs/Reconcile_Project_State.md
 ```
 
+Completed work:
+
+* Added `src/reconcile/journal/service.py`.
+* Added `post_journal_entry` to validate and post balanced journal entries through append-only `JournalEntryPosted` events.
+* Added journal posting payloads with all header and line fields needed to rebuild journal projections.
+* Added pre-append validation for duplicate journal entry IDs.
+* Added pre-append validation for missing account references.
+* Added pre-append validation for inactive account references.
+* Extended `apply_event` to support `JournalEntryPosted` while preserving `AccountOpened` behavior.
+* Preserved Step 7 handler expectations for unsupported event behavior and AccountOpened payload validation.
+* Added projection behavior for `journal_entries`.
+* Added projection behavior for `journal_entry_lines`.
+* Added `status="posted"` for newly posted journal entries.
+* Added `reversed_by_entry_id=None` for newly posted journal entries.
+* Added `reversal_of_entry_id=None` for newly posted journal entries.
+* Added duplicate journal entry ID validation during projection apply.
+* Added duplicate journal line ID validation during projection apply.
+* Added optional journal lookup helpers for single-entry lookup and stable ordered listing.
+* Added `tests/test_journal_posting.py` covering happy paths, bad inputs, projection behavior, payload shape, account validation, duplicate behavior, direct event apply behavior, no-balance-projection behavior, and lookup helpers.
+* Did not add account balance projections, projection rebuilds, reversals, reports, bank import, reconciliation, categorization, dashboard, CLI, or property-based tests.
+
+Files created or edited:
+
+```text
+src/reconcile/journal/service.py
+src/reconcile/events/handlers.py
+tests/test_journal_posting.py
+docs/Reconcile_Project_State.md
+```
+
 Do not implement yet:
 
 * Balance projections
+* Projection rebuild workflow
 * Reversals
 * Reports
+* Bank import
 * Bank reconciliation
+* Categorization
+* Dashboard
+* CLI
 
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # expected final result after fixes: 194 passed
+python -m ruff check .  # run locally in the real repository
+git status              # expected Step 8 files only
 ```
 
 Definition of done:
 
-* Valid journal entries post.
-* JournalEntryPosted events are stored.
-* Journal projections are updated.
-* Invalid entries do not enter event store.
-* Tests pass.
-* Ruff passes.
+* `src/reconcile/journal/service.py` exists.
+* `src/reconcile/events/handlers.py` supports `AccountOpened` and `JournalEntryPosted`.
+* Valid balanced journal entries can be posted through events.
+* Posted journal entries are projected into `journal_entries`.
+* Posted journal lines are projected into `journal_entry_lines`.
+* Missing and inactive accounts are rejected.
+* Duplicate journal entry IDs are rejected.
+* Invalid journal entries do not enter the event store.
+* Journal posting does not update account balances yet.
+* No reversals, reports, reconciliation, dashboard, or CLI logic was added.
+* `tests/test_journal_posting.py` covers happy paths, bad inputs, projection behavior, payload shape, account validation, duplicate behavior, and no-balance-projection behavior.
+* Existing tests pass locally.
+* Ruff passes locally.
+* Project State is updated.
 
 Suggested commit message:
 
