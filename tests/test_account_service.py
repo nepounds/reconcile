@@ -189,8 +189,8 @@ def test_apply_event_can_apply_valid_account_opened_event_directly(tmp_path):
 def test_apply_event_rejects_unsupported_event_types(tmp_path):
     connection = _connection(tmp_path)
     event = _event(
-        event_type="JournalEntryPosted",
-        payload={"journal_entry_id": "je-1"},
+        event_type="AccountClosed",
+        payload={"account_id": "acct-cash"},
     )
 
     with pytest.raises(ValidationError, match="unsupported event type"):

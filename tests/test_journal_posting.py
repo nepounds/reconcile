@@ -264,7 +264,7 @@ def test_applying_journal_entry_posted_rejects_missing_accounts(connection):
         apply_event(connection, event)
 
 
-def test_applying_journal_entry_posted_does_not_write_account_balances(
+def test_applying_journal_entry_posted_writes_account_balances(
     connection,
 ):
     event = append_event(connection, _journal_entry_posted_event())
@@ -275,7 +275,7 @@ def test_applying_journal_entry_posted_does_not_write_account_balances(
         "SELECT COUNT(*) AS count FROM account_balances",
     ).fetchone()["count"]
 
-    assert row_count == 0
+    assert row_count == 2
 
 
 def test_existing_account_opened_handler_behavior_still_works(tmp_path):

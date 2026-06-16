@@ -9,20 +9,18 @@ from reconcile.events.models import LedgerEvent
 from reconcile.exceptions import ValidationError
 from reconcile.journal.models import JournalEntry, JournalLine
 from reconcile.journal.validation import validate_journal_entry
+from reconcile.projections.balances import apply_journal_entry_posted_to_balances
 
 
 def apply_event(connection: sqlite3.Connection, event: LedgerEvent) -> None:
-    """Apply a ledger event to its SQLite projection tables."""
+    """Apply one ledger event to its current projection handlers."""
     if event.event_type == "AccountOpened":
         _apply_account_opened(connection, event)
         return
 
     if event.event_type == "JournalEntryPosted":
-        if "lines" not in event.payload:
-            raise ValidationError(
-                f"unsupported event type: {event.event_type}"
-            )
         _apply_journal_entry_posted(connection, event)
+        apply_journal_entry_posted_to_balances(connection, event)
         return
 
     raise ValidationError(f"unsupported event type: {event.event_type}")

@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 8 — Add journal posting service and journal projections.
+Current step: Step 9 — Add account balance projections.
 
-Status: Step 8 complete.
+Status: Step 9 complete.
 
 Current summary:
 
@@ -29,36 +29,58 @@ Current summary:
 * Step 7 added account-opening services and an `AccountOpened` projection handler for the `accounts` table.
 * Step 8 added journal posting through append-only `JournalEntryPosted` events.
 * Step 8 added journal entry and journal line projections into SQLite.
-* Journal posting now rejects duplicate journal entry IDs, missing accounts, inactive accounts, unbalanced entries, and invalid single-line entries.
-* `JournalEntryPosted` projection writes only to `journal_entries` and `journal_entry_lines`; account balance projections are intentionally not implemented yet.
+* Step 9 added account balance projections for posted journal entries.
+* Journal posting now updates `journal_entries`, `journal_entry_lines`, and `account_balances`.
+* Account balances track debit totals, credit totals, normal-balance-aware balance, update timestamp, and last applied event sequence.
+* Balance projection supports debit-normal and credit-normal account behavior for asset, expense, liability, equity, and revenue accounts.
+* Duplicate application of the same posted journal event is guarded by `account_balances.last_event_sequence`.
+* `AccountOpened` does not create account balance rows by itself.
+* Projection rebuilds, reports, reversals, bank import, reconciliation, categorization, dashboard, CLI, and property-based tests are still intentionally not implemented.
 
-Completed Step 8 files:
+Completed Step 9 files:
 
 ```text
-src/reconcile/journal/service.py
+src/reconcile/projections/__init__.py
+src/reconcile/projections/balances.py
 src/reconcile/events/handlers.py
+tests/test_account_balances.py
 tests/test_journal_posting.py
+tests/test_account_service.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 8 summary:
+Completed Step 9 summary:
 
-* Added `post_journal_entry` to validate and post balanced journal entries through append-only `JournalEntryPosted` events.
-* Added journal posting payloads with all header and line fields needed to rebuild journal projections.
-* Added pre-append validation for duplicate journal entry IDs.
-* Added pre-append validation for missing account references.
-* Added pre-append validation for inactive account references.
-* Extended `apply_event` to support `JournalEntryPosted` while preserving existing `AccountOpened` behavior.
-* Added projection behavior for `journal_entries`.
-* Added projection behavior for `journal_entry_lines`.
-* Added `status="posted"` for newly posted journal entries.
-* Added `reversed_by_entry_id=None` and `reversal_of_entry_id=None` for newly posted entries.
-* Added duplicate journal entry and duplicate journal line ID validation during projection apply.
-* Added optional journal lookup helpers for single-entry and stable ordered listing.
-* Added tests covering happy paths, event payload shape, projection behavior, invalid entries, account validation, duplicate handling, direct event apply behavior, no balance projection behavior, and lookup helpers.
-* Did not add account balance projections, projection rebuilds, reversals, reports, bank import, reconciliation, categorization, dashboard, CLI, or property-based tests.
+* Created the `reconcile.projections` package.
+* Added account balance projection logic in `src/reconcile/projections/balances.py`.
+* Added `apply_journal_entry_posted_to_balances`.
+* Added `get_account_balance`.
+* Added `list_account_balances`.
+* Applied `JournalEntryPosted` events to `account_balances`.
+* Increased debit totals for debit journal lines.
+* Increased credit totals for credit journal lines.
+* Recalculated account balances using normal-balance-aware accounting rules.
+* Used debit-normal balance calculation for asset and expense accounts.
+* Used credit-normal balance calculation for liability, equity, and revenue accounts.
+* Set `updated_at` from the applied event timestamp.
+* Set `last_event_sequence` from the applied event sequence.
+* Added account validation during balance projection.
+* Raised `ValidationError` when a journal line references a missing account.
+* Raised `ValidationError` when an account row has an invalid normal balance.
+* Did not require accounts to be active during projection application.
+* Did not mutate the `accounts` table from balance projection logic.
+* Added idempotency protection so applying the same event twice does not double-count balances when every affected account already has a matching or later `last_event_sequence`.
+* Extended `apply_event` so `JournalEntryPosted` updates journal projections first and then account balance projections.
+* Preserved `AccountOpened` behavior and kept it from creating balance rows.
+* Preserved unsupported-event behavior for future event types that are not implemented yet.
+* Updated stale Step 8 tests that previously asserted journal posting did not write account balances.
+* Updated stale account-service unsupported-event coverage to use a still-unsupported event type.
+* Fixed Step 9 tests to match the real `open_account(connection, account=account)` API.
+* Fixed Step 9 tests to load the appended `JournalEntryPosted` event from the event store instead of assuming `post_journal_entry` returns the event.
+* Fixed a ruff line-length issue in `src/reconcile/projections/balances.py`.
+* Did not add projection rebuilds, reports, reversals, bank import, reconciliation, categorization, dashboard, CLI, or property-based tests.
 
-Commands run for Step 8:
+Commands run for Step 9:
 
 ```bash
 python -m pytest
@@ -69,16 +91,16 @@ git status
 Results:
 
 ```text
-python -m pytest        # run locally after Step 8 fixes; expected 194 passed
-python -m ruff check .  # run locally in the real repository
-git status              # expected Step 8 files only
+python -m pytest        # 221 passed
+python -m ruff check .  # All checks passed
+git status              # expected Step 9 files only
 ```
 
 Next planned step:
 
-Step 9 — Add account balance projections.
+Step 10 — Add projection rebuild workflow.
 
-Step 9 status: Not started.
+Step 10 status: Not started.
 
 ---
 
@@ -2752,51 +2774,114 @@ Add journal posting events and projections
 
 ### Step 9 — Add account balance projections
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Apply journal entries to account-balance projections.
+* Apply posted journal entries to account-balance projections.
 
-Expected work:
+Completed work:
 
-* Add balance projection logic.
-* Update debit totals and credit totals.
-* Calculate normal-balance-aware account balances.
-* Apply journal events to balances.
-* Add tests for asset, liability, equity, revenue, and expense behavior.
+* Created `src/reconcile/projections/__init__.py`.
+* Created `src/reconcile/projections/balances.py`.
+* Exported Step 9 balance projection helpers from the projections package.
+* Added `apply_journal_entry_posted_to_balances(connection, event)`.
+* Added `get_account_balance(connection, account_id)`.
+* Added `list_account_balances(connection)`.
+* Updated `src/reconcile/events/handlers.py` so `JournalEntryPosted` events update account balances after journal header and line projections are written.
+* Kept `AccountOpened` behavior unchanged.
+* Kept `AccountOpened` from creating account balance rows.
+* Preserved unsupported-event behavior for event types that are valid in the model but not implemented in handlers yet.
+* Read journal lines from `JournalEntryPosted` event payloads.
+* Grouped line activity by account before applying balance updates.
+* Inserted account balance rows when an affected account had no prior balance row.
+* Updated account balance rows when an affected account already had balances.
+* Accumulated `debit_total_cents`.
+* Accumulated `credit_total_cents`.
+* Recalculated `balance_cents` after every applied event.
+* Used debit-normal balance calculation for asset and expense accounts:
 
-Allowed files to create/edit:
+```text
+balance_cents = debit_total_cents - credit_total_cents
+```
+
+* Used credit-normal balance calculation for liability, equity, and revenue accounts:
+
+```text
+balance_cents = credit_total_cents - debit_total_cents
+```
+
+* Set balance projection `updated_at` from the event timestamp.
+* Set balance projection `last_event_sequence` from the event sequence.
+* Validated that every line account exists in the `accounts` table.
+* Raised `ValidationError` for missing accounts during balance projection.
+* Validated normal balances read from the database.
+* Raised `ValidationError` for invalid normal balances in the database.
+* Did not require accounts to be active during projection application.
+* Did not mutate the `accounts` table during balance projection.
+* Added idempotency protection using `account_balances.last_event_sequence`.
+* Reapplying the same event does not double-count when every affected account already has a matching or later `last_event_sequence`.
+* Added tests covering asset, expense, liability, equity, and revenue normal-balance behavior.
+* Added tests covering debit and credit total accumulation.
+* Added tests covering repeated entries and balance recalculation.
+* Added tests covering `updated_at` and `last_event_sequence`.
+* Added tests covering direct balance projection application from a loaded event.
+* Added tests covering duplicate application/idempotency.
+* Added tests covering missing accounts and invalid normal balances.
+* Added tests covering `get_account_balance`.
+* Added tests covering `list_account_balances`.
+* Added tests proving `AccountOpened` does not create account balance rows by itself.
+* Updated stale Step 8 journal-posting tests that previously expected no account balance writes.
+* Updated stale account-service unsupported-event coverage so it still checks a genuinely unsupported handler case.
+* Fixed tests to use the existing `open_account(connection, account=account)` API.
+* Fixed tests to load the appended `JournalEntryPosted` event from the event store instead of assuming `post_journal_entry` returns the event.
+* Fixed a ruff line-length issue in `src/reconcile/projections/balances.py`.
+* Did not add projection rebuilds, reports, reversals, bank import, reconciliation, categorization, dashboard, CLI, or property-based tests.
+
+Files created or edited:
 
 ```text
 src/reconcile/projections/__init__.py
 src/reconcile/projections/balances.py
 src/reconcile/events/handlers.py
 tests/test_account_balances.py
+tests/test_journal_posting.py
+tests/test_account_service.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Projection rebuild
-* Reports
-* Reversals
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # 221 passed
+python -m ruff check .  # All checks passed
+git status              # expected Step 9 files only
 ```
 
 Definition of done:
 
-* Debit to asset increases asset balance.
-* Credit to liability increases liability balance.
-* Credit to revenue increases revenue balance.
-* Debit to expense increases expense balance.
-* Tests pass.
+* `src/reconcile/projections/__init__.py` exists.
+* `src/reconcile/projections/balances.py` exists.
+* `src/reconcile/events/handlers.py` applies account balance projections for `JournalEntryPosted`.
+* Posting valid journal entries updates `account_balances`.
+* Debit totals and credit totals accumulate correctly.
+* Normal-balance-aware `balance_cents` is correct for asset, expense, liability, equity, and revenue accounts.
+* Duplicate application of the same event does not double-count balances.
+* `get_account_balance` works.
+* `list_account_balances` works.
+* No rebuild, reports, reversals, reconciliation, dashboard, CLI, or property-based tests were added.
+* `tests/test_account_balances.py` covers happy paths, bad inputs, normal balance behavior, repeated entries, idempotency, and lookup helpers.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
