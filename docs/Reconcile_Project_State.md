@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 4 — Add journal entry models and validation.
+Current step: Step 5 — Add SQLite schema initialization.
 
-Status: Step 4 complete.
+Status: Step 5 complete.
 
 Current summary:
 
@@ -25,7 +25,9 @@ Current summary:
 * Step 3 added account domain definitions, normal balance rules, and a validated `Account` model.
 * Step 4 added journal line and journal entry models with double-entry validation.
 * Journal validation now rejects blank required fields, invalid sides, non-int or non-positive amounts, invalid line numbers, non-date entry dates, non-list lines, single-line entries, mismatched entry IDs, duplicate line numbers, and unbalanced entries.
-* No event storage, SQLite persistence, posting services, reversals, projections, reports, reconciliation, categorization, or dashboard work has started yet.
+* Step 5 added SQLite connection helpers and idempotent MVP schema initialization.
+* Step 5 created the event, account, journal, balance, bank import, bank transaction, reconciliation run, reconciliation match, and reconciliation ledger-link tables.
+* No event append/load logic, account services, posting services, reversals, projections, reports, reconciliation matching, categorization, or dashboard work has started yet.
 
 Completed Step 4 files:
 
@@ -67,11 +69,47 @@ python -m ruff check /mnt/data/reconcile_step4                                  
 git status                                                                          # not run here against the real repository
 ```
 
+Completed Step 5 files:
+
+```text
+src/reconcile/db.py
+tests/test_db_schema.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 5 summary:
+
+* Added `connect(db_path)` for SQLite connections using string or `Path` inputs.
+* Added parent-directory creation for database file paths.
+* Configured connections to use `sqlite3.Row` and `PRAGMA foreign_keys = ON`.
+* Added blank and invalid path validation using the project `ValidationError`.
+* Added `initialize_schema(connection)` to create the MVP SQLite schema idempotently.
+* Added optional `initialize_database(db_path)` helper.
+* Created tables for ledger events, accounts, journal entries, journal lines, account balances, bank imports, bank transactions, reconciliation runs, reconciliation matches, and reconciliation ledger links.
+* Added simple indexes for event type, effective date, account code, journal dates, journal lines, bank transactions, and reconciliation matches.
+* Added schema tests for connection behavior, parent directory creation, required tables, required columns, idempotency, uniqueness, foreign keys, check constraints, and autoincrement event sequences.
+* Did not add event append/load logic, account services, journal posting services, projection handlers, reports, reconciliation matching, categorization, or dashboard logic.
+
+Commands run for Step 5:
+
+```bash
+python -m py_compile /mnt/data/reconcile_step5/src/reconcile/db.py /mnt/data/reconcile_step5/tests/test_db_schema.py
+```
+
+Results in this sandbox:
+
+```text
+python -m py_compile /mnt/data/reconcile_step5/src/reconcile/db.py /mnt/data/reconcile_step5/tests/test_db_schema.py  # success
+python -m pytest                                                                                                      # not run here against the real repository
+python -m ruff check .                                                                                                # not run here against the real repository
+git status                                                                                                            # not run here against the real repository
+```
+
 Next planned step:
 
-Step 5 — Add SQLite schema initialization.
+Step 6 — Add event models and append-only event store.
 
-Step 5 status: Not started.
+Step 6 status: Not started.
 
 ---
 
@@ -2346,7 +2384,7 @@ Add journal entry models and double-entry validation
 
 ### Step 5 — Add SQLite schema initialization
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
@@ -2382,13 +2420,48 @@ python -m pytest
 python -m ruff check .
 ```
 
+Completed work:
+
+* Added `src/reconcile/db.py`.
+* Added `connect(db_path)` with parent directory creation, `sqlite3.Row`, and foreign key enforcement.
+* Added `initialize_schema(connection)` with repeatable MVP table creation.
+* Added optional `initialize_database(db_path)` helper.
+* Added all MVP schema tables listed in the official schema.
+* Added simple supporting indexes.
+* Added `tests/test_db_schema.py` for connection behavior, table creation, required columns, idempotency, uniqueness, foreign keys, check constraints, and event sequence autoincrement.
+* Did not implement event append/load logic or services.
+
+Files created or edited:
+
+```text
+src/reconcile/db.py
+tests/test_db_schema.py
+docs/Reconcile_Project_State.md
+```
+
+Commands run:
+
+```bash
+python -m py_compile /mnt/data/reconcile_step5/src/reconcile/db.py /mnt/data/reconcile_step5/tests/test_db_schema.py
+```
+
+Results in this sandbox:
+
+```text
+python -m py_compile /mnt/data/reconcile_step5/src/reconcile/db.py /mnt/data/reconcile_step5/tests/test_db_schema.py  # success
+python -m pytest                                                                                                      # run locally in the real repository
+python -m ruff check .                                                                                                # run locally in the real repository
+git status                                                                                                            # run locally in the real repository
+```
+
 Definition of done:
 
 * Test database initializes.
 * Required tables exist.
 * Schema setup is repeatable.
-* Tests pass.
-* Ruff passes.
+* Schema constraints are tested.
+* Local tests should pass in the real repository.
+* Local ruff should pass in the real repository.
 
 Suggested commit message:
 
