@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 3 — Add account models and chart of accounts validation.
+Current step: Step 4 — Add journal entry models and validation.
 
-Status: Step 3 complete.
+Status: Step 4 complete.
 
 Current summary:
 
@@ -23,60 +23,55 @@ Current summary:
 * Fake demo input CSV files exist for the chart of accounts, journal entries, and bank statement.
 * Step 2 added the custom exception hierarchy and integer-cents money helpers.
 * Step 3 added account domain definitions, normal balance rules, and a validated `Account` model.
-* Account validation now rejects blank required fields, invalid account types, invalid normal balances, mismatched normal balances, non-bool active flags, and blank close timestamps.
-* No journal entries, event storage, SQLite persistence, reports, reconciliation, categorization, or dashboard work has started yet.
+* Step 4 added journal line and journal entry models with double-entry validation.
+* Journal validation now rejects blank required fields, invalid sides, non-int or non-positive amounts, invalid line numbers, non-date entry dates, non-list lines, single-line entries, mismatched entry IDs, duplicate line numbers, and unbalanced entries.
+* No event storage, SQLite persistence, posting services, reversals, projections, reports, reconciliation, categorization, or dashboard work has started yet.
 
-Completed Step 3 files:
+Completed Step 4 files:
 
 ```text
-src/reconcile/accounts/__init__.py
-src/reconcile/accounts/models.py
-tests/test_accounts.py
+src/reconcile/journal/__init__.py
+src/reconcile/journal/models.py
+src/reconcile/journal/validation.py
+tests/test_journal_models.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 3 summary:
+Completed Step 4 summary:
 
-* Added `AccountType` and `NormalBalance` string enums.
-* Added `VALID_ACCOUNT_TYPES` and `VALID_NORMAL_BALANCES` constants.
-* Added the official normal balance mapping:
+* Added frozen `JournalLine` dataclass with validation in `__post_init__`.
+* Added frozen `JournalEntry` dataclass with validation in `__post_init__`.
+* Added validation that journal entries must contain at least two lines.
+* Added validation that every journal line must have side `debit` or `credit`.
+* Added validation that journal amounts use positive integer cents and reject bool values.
+* Added validation that line numbers use positive integers, reject bool values, and are unique within an entry.
+* Added validation that all lines in an entry belong to the same `journal_entry_id`.
+* Added validation that total debits equal total credits.
+* Added journal validation helpers: `validate_journal_line`, `validate_journal_entry`, `total_debits`, `total_credits`, and `is_balanced`.
+* Added focused journal model tests covering happy paths, bad inputs, edge cases, helper functions, and `ValidationError` behavior.
+* Did not add SQLite, event storage, posting services, reversals, projections, reports, reconciliation, categorization, or dashboard work.
 
-  * `asset -> debit`
-  * `expense -> debit`
-  * `liability -> credit`
-  * `equity -> credit`
-  * `revenue -> credit`
-
-* Added `expected_normal_balance(account_type: str) -> str`.
-* Added `validate_account_type(account_type: str) -> str`.
-* Added `validate_normal_balance(normal_balance: str) -> str`.
-* Added frozen `Account` dataclass with validation in `__post_init__`.
-* Added focused account model tests covering happy paths, bad inputs, edge cases, and `ValidationError` behavior.
-* Did not add SQLite, account services, events, journal posting, reports, reconciliation, categorization, or dashboard work.
-
-Commands run for Step 3:
+Commands run for Step 4:
 
 ```bash
-PYTHONPATH=src python -m pytest tests/test_accounts.py
-PYTHONPATH=src python -m pytest
-python -m ruff check .
+PYTHONPATH=/tmp/reconcile_test/src pytest -q /tmp/reconcile_test/test_journal_models.py
+python -m ruff check /mnt/data/reconcile_step4
 git status
 ```
 
 Results in this sandbox:
 
 ```text
-PYTHONPATH=src python -m pytest tests/test_accounts.py  # could not complete: base Step 2 files are not present in this sandbox
-PYTHONPATH=src python -m pytest                         # could not complete: base Step 2 files are not present in this sandbox
-python -m ruff check .                                  # failed: No module named ruff in this sandbox environment
-git status                                               # fatal: not a git repository (or any of the parent directories): .git
+PYTHONPATH=/tmp/reconcile_test/src pytest -q /tmp/reconcile_test/test_journal_models.py  # 31 passed
+python -m ruff check /mnt/data/reconcile_step4                                      # failed: No module named ruff in this sandbox environment
+git status                                                                          # not run here against the real repository
 ```
 
 Next planned step:
 
-Step 4 — Add journal entry models and validation.
+Step 5 — Add SQLite schema initialization.
 
-Step 4 status: Not started.
+Step 5 status: Not started.
 
 ---
 
@@ -2275,23 +2270,31 @@ Add account models and validation
 
 ### Step 4 — Add journal entry models and validation
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Define journal entry and journal line models with double-entry validation.
 
-Expected work:
+Completed work:
 
-* Add journal line model.
-* Add journal entry model.
-* Validate at least two lines.
-* Validate each line has debit or credit side.
-* Validate each line has positive amount.
-* Validate total debits equal total credits.
-* Add tests for balanced and unbalanced entries.
+* Added `src/reconcile/journal/__init__.py` with Step 4 exports only.
+* Added `src/reconcile/journal/models.py` with `JournalLine` and `JournalEntry` dataclasses.
+* Added validation for required journal line fields.
+* Added validation for required journal entry fields.
+* Added validation that journal line side must be `debit` or `credit`.
+* Added validation that journal line amounts must be positive integer cents and reject bool values.
+* Added validation that line numbers must be positive integers and reject bool values.
+* Added validation that optional line descriptions and external references cannot be blank when provided.
+* Added validation that entries must contain at least two `JournalLine` items.
+* Added validation that all lines must match the parent `journal_entry_id`.
+* Added validation that line numbers are unique within an entry.
+* Added validation that total debits must equal total credits.
+* Added `src/reconcile/journal/validation.py` with `validate_journal_line`, `validate_journal_entry`, `total_debits`, `total_credits`, and `is_balanced`.
+* Added `tests/test_journal_models.py` covering happy paths, bad inputs, edge cases, helper functions, and `ValidationError` behavior.
+* Did not implement event storage, SQLite persistence, posting services, reversals, projections, reports, reconciliation, categorization, or dashboard logic.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/journal/__init__.py
@@ -2301,28 +2304,37 @@ tests/test_journal_models.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Event store
-* SQL persistence
-* Reversals
-* Reports
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
-python -m ruff check .
+PYTHONPATH=/tmp/reconcile_test/src pytest -q /tmp/reconcile_test/test_journal_models.py
+python -m ruff check /mnt/data/reconcile_step4
+git status
+```
+
+Results in this sandbox:
+
+```text
+PYTHONPATH=/tmp/reconcile_test/src pytest -q /tmp/reconcile_test/test_journal_models.py  # 31 passed
+python -m ruff check /mnt/data/reconcile_step4                                      # failed: No module named ruff in this sandbox environment
+git status                                                                          # not run here against the real repository
 ```
 
 Definition of done:
 
-* Valid journal entries pass.
+* `src/reconcile/journal/__init__.py` exists.
+* `src/reconcile/journal/models.py` exists.
+* `src/reconcile/journal/validation.py` exists.
+* Valid balanced journal entries pass.
 * Unbalanced entries fail.
 * Single-line entries fail.
 * Negative or zero amounts fail.
-* Tests pass.
-* Ruff passes.
+* Duplicate line numbers fail.
+* Invalid journal data fails clearly with `ValidationError`.
+* Journal tests cover happy paths, bad inputs, and edge cases.
+* No SQLite, event store, posting service, projection, report, reconciliation, or dashboard logic was added.
+* Project State updated.
+* Full local test, ruff, and git checks should be run in the real repository virtual environment.
 
 Suggested commit message:
 
