@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 5 — Add SQLite schema initialization.
+Current step: Step 7 — Add account service and AccountOpened projection.
 
-Status: Step 5 complete.
+Status: Step 7 complete.
 
 Current summary:
 
@@ -27,7 +27,9 @@ Current summary:
 * Journal validation now rejects blank required fields, invalid sides, non-int or non-positive amounts, invalid line numbers, non-date entry dates, non-list lines, single-line entries, mismatched entry IDs, duplicate line numbers, and unbalanced entries.
 * Step 5 added SQLite connection helpers and idempotent MVP schema initialization.
 * Step 5 created the event, account, journal, balance, bank import, bank transaction, reconciliation run, reconciliation match, and reconciliation ledger-link tables.
-* No event append/load logic, account services, posting services, reversals, projections, reports, reconciliation matching, categorization, or dashboard work has started yet.
+* Step 6 added validated ledger event models and append-only SQLite event storage.
+* Step 6 added deterministic event loading in `event_sequence` order.
+* Step 7 added account-opening services and an AccountOpened projection handler for the accounts table.
 
 Completed Step 4 files:
 
@@ -105,12 +107,89 @@ python -m ruff check .                                                          
 git status                                                                                                            # not run here against the real repository
 ```
 
+Completed Step 6 files:
+
+```text
+src/reconcile/events/__init__.py
+src/reconcile/events/models.py
+src/reconcile/events/store.py
+tests/test_event_store.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 6 summary:
+
+* Added `LedgerEvent` as the storage-friendly append-only ledger event model.
+* Added validation for required event fields, event versions, timestamps, source, payload, optional string metadata, and event sequence values.
+* Added official MVP event type constants.
+* Added JSON-serializable payload validation.
+* Added append-only SQLite event insertion through `append_event`.
+* Added deterministic event loading through `load_events`.
+* Added optional lookup helpers for event ID and event type.
+* Stored payloads as JSON in `payload_json`.
+* Returned database-assigned `event_sequence` values after append.
+* Converted duplicate event IDs into a project `ValidationError`.
+* Confirmed event appends do not write to account, journal, balance, bank, or reconciliation projection tables.
+* Did not add event handlers, projections, account services, journal posting services, reversals, reports, reconciliation, or dashboard logic.
+
+Commands run for Step 6:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # passed locally
+python -m ruff check .  # passed locally after fixing an initial ruff error
+git status              # expected Step 6 files only
+```
+
+Completed Step 7 files:
+
+```text
+src/reconcile/accounts/service.py
+src/reconcile/accounts/chart.py
+src/reconcile/events/handlers.py
+tests/test_account_service.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 7 summary:
+
+* Added `open_account` to create accounts through append-only `AccountOpened` events.
+* Added `apply_event` handling for `AccountOpened` events only.
+* Added projection behavior that writes validated account data into the `accounts` table.
+* Added duplicate account ID and duplicate account code checks before event append and during projection apply.
+* Added account lookup helpers for ID, code, and stable code-ordered listing.
+* Added a minimal batch `open_accounts` helper for future chart-of-accounts loading.
+* Added account-service tests covering event append behavior, projection behavior, payload shape, duplicate failures, unsupported event handling, lookup helpers, and batch opening.
+* Did not add journal posting, balance projections, projection rebuilds, reports, reversals, reconciliation, categorization, dashboard, or CLI logic.
+
+Commands run for Step 7:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # run locally in the real repository
+python -m ruff check .  # run locally in the real repository
+git status              # expected Step 7 files only
+```
+
 Next planned step:
 
-Step 6 — Add event models and append-only event store.
+Step 8 — Add journal posting service and journal projections.
 
-Step 6 status: Not started.
-
+Step 8 status: Not started.
 ---
 
 ## Project name
@@ -2473,7 +2552,7 @@ Add SQLite schema initialization
 
 ### Step 6 — Add event models and append-only event store
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
@@ -2512,6 +2591,48 @@ python -m pytest
 python -m ruff check .
 ```
 
+Completed work:
+
+* Added `src/reconcile/events/__init__.py` with Step 6 exports only.
+* Added `src/reconcile/events/models.py` with the `LedgerEvent` dataclass.
+* Added official MVP event type constants.
+* Added validation for blank required fields, invalid event versions, bool event versions, non-dict payloads, non-JSON-serializable payloads, blank optional strings, and invalid event sequences.
+* Added `src/reconcile/events/store.py` with append-only event-store functions.
+* Added `append_event(connection, event)` to insert one row into `ledger_events` and return the stored event with its assigned `event_sequence`.
+* Added `load_events(connection)` to return all events in deterministic `event_sequence ASC` order.
+* Added `load_event_by_id(connection, event_id)` for single-event lookup.
+* Added `load_events_by_type(connection, event_type)` for filtered deterministic event loading.
+* Stored event payloads as JSON in `payload_json` and round-tripped them back to dict payloads.
+* Converted duplicate event IDs into a project `ValidationError`.
+* Added event-store tests covering model validation, append behavior, event sequence assignment, deterministic loading, JSON payload round trips, duplicate IDs, commit behavior, empty loads, event lookup, event-type filtering, and no projection writes.
+* Did not add event handlers, projection writes, account services, journal posting services, reversals, reports, reconciliation, categorization, or dashboard logic.
+
+Files created or edited:
+
+```text
+src/reconcile/events/__init__.py
+src/reconcile/events/models.py
+src/reconcile/events/store.py
+tests/test_event_store.py
+docs/Reconcile_Project_State.md
+```
+
+Commands run:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # passed locally
+python -m ruff check .  # passed locally after fixing an initial ruff error
+git status              # expected Step 6 files only
+```
+
 Definition of done:
 
 * Events append successfully.
@@ -2520,18 +2641,18 @@ Definition of done:
 * Invalid event data fails clearly.
 * Tests pass.
 * Ruff passes.
+* Project State updated.
 
 Suggested commit message:
 
 ```text
 Add append-only event store
 ```
-
 ---
 
 ### Step 7 — Add account service and AccountOpened projection
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
@@ -2570,14 +2691,54 @@ python -m pytest
 python -m ruff check .
 ```
 
+Completed work:
+
+* Added `src/reconcile/accounts/service.py`.
+* Added `open_account` to append an `AccountOpened` event and then apply it to the accounts projection.
+* Added duplicate account ID and duplicate account code validation before appending events.
+* Added AccountOpened payloads with all fields required to rebuild the account projection.
+* Added account lookup helpers: `get_account_by_id`, `get_account_by_code`, and `list_accounts`.
+* Added `src/reconcile/events/handlers.py` with `apply_event` support for `AccountOpened` only.
+* Added clear `ValidationError` behavior for unsupported Step 7 event types.
+* Added `src/reconcile/accounts/chart.py` with minimal `open_accounts` batch helper.
+* Added `tests/test_account_service.py` covering account opening, event storage, projection writes, duplicate behavior, payload shape, direct event application, unsupported event behavior, lookup helpers, stable listing, and batch account opening.
+* Did not add journal posting, balance projections, reports, reversals, reconciliation, categorization, dashboard, or CLI logic.
+
+Files created or edited:
+
+```text
+src/reconcile/accounts/service.py
+src/reconcile/accounts/chart.py
+src/reconcile/events/handlers.py
+tests/test_account_service.py
+docs/Reconcile_Project_State.md
+```
+
+Commands run:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # run locally in the real repository
+python -m ruff check .  # run locally in the real repository
+git status              # expected Step 7 files only
+```
+
 Definition of done:
 
 * Accounts can be opened.
 * AccountOpened events are stored.
 * Accounts projection is updated.
-* Duplicate account codes fail.
-* Tests pass.
-* Ruff passes.
+* Duplicate account IDs and account codes fail.
+* AccountOpened payloads can rebuild account projections.
+* Tests pass locally.
+* Ruff passes locally.
 
 Suggested commit message:
 
