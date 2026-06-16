@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 9 — Add account balance projections.
+Current step: Step 10 — Add projection rebuild workflow.
 
-Status: Step 9 complete.
+Status: Step 10 complete.
 
 Current summary:
 
@@ -30,77 +30,75 @@ Current summary:
 * Step 8 added journal posting through append-only `JournalEntryPosted` events.
 * Step 8 added journal entry and journal line projections into SQLite.
 * Step 9 added account balance projections for posted journal entries.
-* Journal posting now updates `journal_entries`, `journal_entry_lines`, and `account_balances`.
-* Account balances track debit totals, credit totals, normal-balance-aware balance, update timestamp, and last applied event sequence.
-* Balance projection supports debit-normal and credit-normal account behavior for asset, expense, liability, equity, and revenue accounts.
-* Duplicate application of the same posted journal event is guarded by `account_balances.last_event_sequence`.
-* `AccountOpened` does not create account balance rows by itself.
-* Projection rebuilds, reports, reversals, bank import, reconciliation, categorization, dashboard, CLI, and property-based tests are still intentionally not implemented.
+* Step 10 added a projection rebuild workflow that clears derived tables and replays append-only events.
+* Projection rebuilds replay events in deterministic `event_sequence` order.
+* Projection rebuilds now restore account, journal entry, journal line, and account balance projections from the event log.
+* Projection clearing leaves `ledger_events` untouched.
+* Rebuild behavior is safe to run repeatedly and does not append new events.
+* A thin rebuild script exists at `scripts/rebuild_projections.py`.
+* Reports, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, and property-based tests are still intentionally not implemented.
 
-Completed Step 9 files:
+Completed Step 10 files:
 
 ```text
-src/reconcile/projections/__init__.py
-src/reconcile/projections/balances.py
-src/reconcile/events/handlers.py
-tests/test_account_balances.py
-tests/test_journal_posting.py
-tests/test_account_service.py
+src/reconcile/projections/rebuild.py
+scripts/rebuild_projections.py
+tests/test_projection_rebuild.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 9 summary:
+Completed Step 10 summary:
 
-* Created the `reconcile.projections` package.
-* Added account balance projection logic in `src/reconcile/projections/balances.py`.
-* Added `apply_journal_entry_posted_to_balances`.
-* Added `get_account_balance`.
-* Added `list_account_balances`.
-* Applied `JournalEntryPosted` events to `account_balances`.
-* Increased debit totals for debit journal lines.
-* Increased credit totals for credit journal lines.
-* Recalculated account balances using normal-balance-aware accounting rules.
-* Used debit-normal balance calculation for asset and expense accounts.
-* Used credit-normal balance calculation for liability, equity, and revenue accounts.
-* Set `updated_at` from the applied event timestamp.
-* Set `last_event_sequence` from the applied event sequence.
-* Added account validation during balance projection.
-* Raised `ValidationError` when a journal line references a missing account.
-* Raised `ValidationError` when an account row has an invalid normal balance.
-* Did not require accounts to be active during projection application.
-* Did not mutate the `accounts` table from balance projection logic.
-* Added idempotency protection so applying the same event twice does not double-count balances when every affected account already has a matching or later `last_event_sequence`.
-* Extended `apply_event` so `JournalEntryPosted` updates journal projections first and then account balance projections.
-* Preserved `AccountOpened` behavior and kept it from creating balance rows.
-* Preserved unsupported-event behavior for future event types that are not implemented yet.
-* Updated stale Step 8 tests that previously asserted journal posting did not write account balances.
-* Updated stale account-service unsupported-event coverage to use a still-unsupported event type.
-* Fixed Step 9 tests to match the real `open_account(connection, account=account)` API.
-* Fixed Step 9 tests to load the appended `JournalEntryPosted` event from the event store instead of assuming `post_journal_entry` returns the event.
-* Fixed a ruff line-length issue in `src/reconcile/projections/balances.py`.
-* Did not add projection rebuilds, reports, reversals, bank import, reconciliation, categorization, dashboard, CLI, or property-based tests.
+* Added `src/reconcile/projections/rebuild.py`.
+* Added `clear_projections(connection)`.
+* Added `rebuild_projections(connection)`.
+* Added `projection_row_counts(connection)`.
+* Defined projection-table deletion order that clears child tables before parent tables.
+* Cleared derived bank and reconciliation projection tables even though they are not populated yet.
+* Cleared `account_balances`, `journal_entry_lines`, `journal_entries`, and `accounts` during projection reset.
+* Preserved `ledger_events` during projection clearing.
+* Rebuilt projections by loading events from the append-only event store.
+* Replayed events through existing `apply_event` behavior.
+* Preserved existing unsupported-event behavior for valid MVP event types that do not have handlers yet.
+* Rebuilt account rows from `AccountOpened` events.
+* Rebuilt journal entry rows from `JournalEntryPosted` events.
+* Rebuilt journal line rows from `JournalEntryPosted` events.
+* Rebuilt account balance rows from `JournalEntryPosted` events.
+* Verified rebuilt balances match incremental balances created during normal posting.
+* Verified debit totals, credit totals, and normal-balance-aware balances survive rebuild.
+* Verified rebuild preserves event count, event IDs, and event sequences.
+* Verified running rebuild twice is deterministic and does not duplicate journal lines.
+* Verified rebuild handles an empty event log.
+* Added `scripts/rebuild_projections.py` as a thin argparse wrapper.
+* The rebuild script accepts `--db-path` and defaults to `exports/reconcile.db`.
+* The rebuild script initializes the schema before rebuilding so it can run against a new database path.
+* Fixed Step 10 tests to use real `datetime.date` values for `JournalEntry.entry_date`.
+* Fixed ruff import-order and line-length issues in the rebuild module and tests.
+* Did not add reports, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, or property-based tests.
 
-Commands run for Step 9:
+Commands run for Step 10:
 
 ```bash
 python -m pytest
 python -m ruff check .
+python scripts/rebuild_projections.py --db-path exports/reconcile.db
 git status
 ```
 
 Results:
 
 ```text
-python -m pytest        # 221 passed
-python -m ruff check .  # All checks passed
-git status              # expected Step 9 files only
+python -m pytest                                      # 246 passed
+python -m ruff check .                                # All checks passed
+python scripts/rebuild_projections.py --db-path exports/reconcile.db  # success
+git status                                            # expected Step 10 files only
 ```
 
 Next planned step:
 
-Step 10 — Add projection rebuild workflow.
+Step 11 — Add trial balance report.
 
-Step 10 status: Not started.
+Step 11 status: Not started.
 
 ---
 
@@ -2893,22 +2891,68 @@ Add account balance projections
 
 ### Step 10 — Add projection rebuild workflow
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Clear projections and rebuild them from the event log.
 
-Expected work:
+Completed work:
 
-* Add projection rebuild module.
-* Clear projection tables safely.
-* Replay all events in `event_sequence` order.
-* Rebuild accounts, journal entries, journal lines, and balances.
-* Add rebuild script.
-* Add tests proving rebuilt balances match current balances.
+* Added `src/reconcile/projections/rebuild.py`.
+* Added `clear_projections(connection)` to clear derived projection tables without deleting events.
+* Added `rebuild_projections(connection)` to clear projections and replay append-only events.
+* Added `projection_row_counts(connection)` to inspect projection table row counts.
+* Cleared projection tables in foreign-key-safe child-before-parent order.
+* Cleared future derived bank and reconciliation tables as part of projection reset:
 
-Allowed files to create/edit:
+```text
+reconciliation_match_ledger_links
+reconciliation_matches
+reconciliation_runs
+bank_transactions
+bank_statement_imports
+```
+
+* Cleared current accounting projection tables as part of projection reset:
+
+```text
+account_balances
+journal_entry_lines
+journal_entries
+accounts
+```
+
+* Explicitly preserved `ledger_events` during projection clearing and rebuilding.
+* Rebuilt projections by loading events with `load_events(connection)`.
+* Replayed events in deterministic `event_sequence` order.
+* Reused existing `apply_event(connection, event)` behavior instead of adding duplicate rebuild-specific handlers.
+* Rebuilt `accounts` from `AccountOpened` events.
+* Rebuilt `journal_entries` from `JournalEntryPosted` events.
+* Rebuilt `journal_entry_lines` from `JournalEntryPosted` events.
+* Rebuilt `account_balances` from `JournalEntryPosted` events.
+* Preserved existing unsupported-event behavior for MVP event types without handlers.
+* Verified rebuild does not append new events.
+* Verified rebuild preserves event count, event IDs, and event sequences.
+* Verified rebuild is safe and deterministic when run more than once.
+* Verified rebuild does not duplicate journal lines.
+* Verified rebuilt account balances match incrementally posted balances.
+* Verified rebuilt debit totals match incremental debit totals.
+* Verified rebuilt credit totals match incremental credit totals.
+* Verified rebuilt normal-balance-aware balances match incremental balances.
+* Verified rebuild handles an empty event log by leaving projection tables empty.
+* Added `scripts/rebuild_projections.py` as a thin script wrapper.
+* Added `argparse` support for optional `--db-path`.
+* Set the script default database path to `exports/reconcile.db`.
+* Used `connect` to open the SQLite database.
+* Initialized schema in the script before rebuild so the script can run against a fresh database path.
+* Kept business logic in `src/reconcile/projections/rebuild.py` rather than the script.
+* Added `tests/test_projection_rebuild.py` covering clearing, replay, idempotency, event-store protection, balance correctness, unsupported event behavior, row counts, and script smoke behavior.
+* Fixed Step 10 tests to use real `datetime.date` values for journal entry dates.
+* Fixed ruff import-order and line-length issues.
+* Did not add reports, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, or property-based tests.
+
+Files created or edited:
 
 ```text
 src/reconcile/projections/rebuild.py
@@ -2917,26 +2961,42 @@ tests/test_projection_rebuild.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Reports
-* Reversals
-* Bank import
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+python scripts/rebuild_projections.py --db-path exports/reconcile.db
+git status
+```
+
+Results:
+
+```text
+python -m pytest                                      # 246 passed
+python -m ruff check .                                # All checks passed
+python scripts/rebuild_projections.py --db-path exports/reconcile.db  # success
+git status                                            # expected Step 10 files only
 ```
 
 Definition of done:
 
-* Projections can be rebuilt.
-* Replay order is deterministic.
-* Rebuilt balances match incremental balances.
-* Tests pass.
+* `src/reconcile/projections/rebuild.py` exists.
+* `scripts/rebuild_projections.py` exists.
+* Projection tables can be cleared without deleting `ledger_events`.
+* Projections can be rebuilt from events in `event_sequence` order.
+* Account projections rebuild from `AccountOpened` events.
+* Journal projections rebuild from `JournalEntryPosted` events.
+* Balance projections rebuild from `JournalEntryPosted` events.
+* Rebuilt projections match incremental projections.
+* Rebuild is deterministic and safe to run repeatedly.
+* Rebuild does not append new events.
+* Rebuild does not duplicate rows.
+* No reports, reversals, bank import, reconciliation, dashboard, full CLI workflow, or property-based tests were added.
+* `tests/test_projection_rebuild.py` covers clearing, replay, deterministic behavior, event-store protection, and balance correctness.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
