@@ -1,0 +1,11 @@
+entry_id,entry_date,description,line_number,account_code,side,amount,line_description,external_reference
+JE-001,2026-01-01,Owner contribution,1,1000,debit,5000.00,Cash received from owner,DEMO-OWNER-001
+JE-001,2026-01-01,Owner contribution,2,3000,credit,5000.00,Owner capital contribution,DEMO-OWNER-001
+JE-002,2026-01-05,Software subscription,1,5100,debit,50.00,Monthly accounting software,DEMO-SOFTWARE-001
+JE-002,2026-01-05,Software subscription,2,1000,credit,50.00,Cash payment for software,DEMO-SOFTWARE-001
+JE-003,2026-01-10,Customer service invoice,1,1100,debit,1200.00,Customer invoice issued,DEMO-INVOICE-001
+JE-003,2026-01-10,Customer service invoice,2,4000,credit,1200.00,Service revenue earned,DEMO-INVOICE-001
+JE-004,2026-01-12,Customer payment,1,1000,debit,1200.00,Cash received from customer,DEMO-PAYMENT-001
+JE-004,2026-01-12,Customer payment,2,1100,credit,1200.00,Receivable collected,DEMO-PAYMENT-001
+JE-005,2026-01-15,Rent payment,1,5000,debit,900.00,Monthly office rent,DEMO-RENT-001
+JE-005,2026-01-15,Rent payment,2,1000,credit,900.00,Cash payment for rent,DEMO-RENT-001

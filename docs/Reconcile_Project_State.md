@@ -10,56 +10,68 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 0 — README-driven planning and Project State.
+Current step: Step 1 — Create project skeleton and tooling baseline.
 
-Status: Step 0 complete.
+Status: Step 1 complete.
 
 Current summary:
 
-* Reconcile is planned as a local-first, event-sourced double-entry general ledger engine in Python with SQLite storage.
-* The project will demonstrate accounting domain knowledge and serious software engineering rigor.
-* Core planned features include immutable ledger events, journal posting, reversals, projection replay, point-in-time reports, bank reconciliation, rule-based categorization, optional local machine-learning categorization, property-based accounting invariant tests, and a Streamlit dashboard.
-* Step 0 planning documentation is complete.
-* No implementation has started yet.
+* Reconcile has its initial Python package skeleton under `src/reconcile/`.
+* `pyproject.toml` is now the dependency source of truth.
+* Development tooling is limited to pytest and ruff.
+* The package import smoke test passes.
+* Fake demo input CSV files exist for the chart of accounts, journal entries, and bank statement.
+* Placeholder output folders exist for `examples/sample_output/` and `exports/`.
+* No accounting engine implementation has started yet.
 
-Completed Step 0 documents:
+Completed Step 1 files:
 
 ```text
-README.md
+.gitignore
+.python-version
+pyproject.toml
+src/reconcile/__init__.py
+tests/test_package_import.py
+examples/demo_company/chart_of_accounts.csv
+examples/demo_company/journal_entries.csv
+examples/demo_company/bank_statement.csv
+examples/sample_output/.gitkeep
+exports/.gitkeep
 docs/Reconcile_Project_State.md
-docs/Architecture.md
-docs/Event_Model.md
-docs/Accounting_Invariants.md
-docs/Reconciliation_Design.md
-docs/Step_Plan.md
 ```
 
-Commands run for Step 0:
+Commands run for Step 1:
 
 ```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+python -m ruff check .
 git status
 ```
 
-Result in this sandbox:
+Results in this sandbox:
 
 ```text
-fatal: not a git repository (or any of the parent directories): .git
+python -m pip install -e ".[dev]"  # success
+python -m pytest                    # 2 passed
+python -m ruff check .              # All checks passed!
+git status                          # fatal: not a git repository (or any of the parent directories): .git
 ```
 
-Step 1 status: Not started.
+Step 2 status: Not started.
 
 Next planned step:
 
-Step 1 — Create project skeleton and tooling baseline.
+Step 2 — Add core exceptions and money helpers.
 
-Expected Step 1 work:
+Expected Step 2 work:
 
-* Create the official repo structure.
-* Add Python packaging and tooling.
-* Add pytest and ruff.
-* Add a package import smoke test.
-* Add the first fake sample files.
-* Confirm tests and linting pass.
+* Add custom project exceptions.
+* Add safe money parsing and formatting helpers.
+* Convert dollar strings to integer cents.
+* Convert integer cents to display strings.
+* Reject invalid money values clearly.
+* Keep tests focused and offline.
 
 ---
 
@@ -2046,27 +2058,28 @@ Add Reconcile planning docs
 
 ### Step 1 — Create project skeleton and tooling baseline
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Create the repo structure and confirm the basic Python package works.
 
-Expected work:
+Completed work:
 
-* Create official folders.
-* Add `.gitignore`.
-* Add `.python-version` if used.
-* Add `pyproject.toml`.
-* Add minimal `src/reconcile/__init__.py`.
-* Add minimal package import smoke test.
-* Add fake sample input placeholders.
-* Add placeholder output folders if useful.
-* Confirm editable install works.
-* Confirm pytest passes.
-* Confirm ruff passes.
+* Created the initial `src/` package layout.
+* Added `src/reconcile/__init__.py` with a package docstring and `__version__`.
+* Added `pyproject.toml` using setuptools with `src/` layout.
+* Added development dependencies for pytest and ruff only.
+* Added simple ruff configuration.
+* Added `.gitignore` for Python caches, virtual environments, tool caches, local database files, and local environment files.
+* Added `.python-version` matching the local Python version used in this sandbox.
+* Added `tests/test_package_import.py` for the import smoke test.
+* Added fake demo company CSV files using the official Step 1 columns.
+* Confirmed all fake sample journal entries balance.
+* Added `.gitkeep` placeholders for `examples/sample_output/` and `exports/`.
+* Did not add SQL schema, event store, models, posting logic, reports, reconciliation, categorization, dashboard, or future dependencies.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 .gitignore
@@ -2077,23 +2090,27 @@ tests/test_package_import.py
 examples/demo_company/chart_of_accounts.csv
 examples/demo_company/journal_entries.csv
 examples/demo_company/bank_statement.csv
+examples/sample_output/.gitkeep
+exports/.gitkeep
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* SQL schema
-* event store
-* accounting models
-* reconciliation logic
-* dashboard
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results in this sandbox:
+
+```text
+python -m pip install -e ".[dev]"  # success
+python -m pytest                    # 2 passed
+python -m ruff check .              # All checks passed!
+git status                          # fatal: not a git repository (or any of the parent directories): .git
 ```
 
 Definition of done:
@@ -2102,7 +2119,7 @@ Definition of done:
 * Tests pass.
 * Ruff passes.
 * Project State updated.
-* Git status only shows expected files.
+* Git status was checked; this sandbox is not a Git repository.
 
 Suggested commit message:
 

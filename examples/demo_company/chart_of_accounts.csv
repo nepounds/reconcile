@@ -1,0 +1,10 @@
+account_code,account_name,account_type,normal_balance,parent_account_code,description,is_active
+1000,Cash,asset,debit,,Primary checking account,true
+1100,Accounts Receivable,asset,debit,,Customer receivables,true
+2000,Accounts Payable,liability,credit,,Vendor payables,true
+3000,Owner Equity,equity,credit,,Owner capital,true
+4000,Service Revenue,revenue,credit,,Service income,true
+5000,Rent Expense,expense,debit,,Office rent,true
+5100,Software Expense,expense,debit,,Software subscriptions,true
+5200,Meals Expense,expense,debit,,Business meals,true
+5300,Office Supplies Expense,expense,debit,,Office supplies,true
