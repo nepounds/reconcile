@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 16 — Add bank duplicate detection.
+Current step: Step 17 — Add ledger cash movement extraction.
 
-Status: Step 16 complete.
+Status: Step 17 complete.
 
-Approximate project completion: 52% to 54%.
+Approximate project completion: 55% to 57%.
 
 Current summary:
 
@@ -41,6 +41,11 @@ Current summary:
 * Step 15 added raw bank description preservation, normalized descriptions, signed integer bank amounts, deterministic row hashes, and bank import metadata.
 * Step 16 added bank duplicate detection and duplicate marking for imported bank transactions.
 * Step 16 integrated duplicate marking into bank CSV import so duplicates are flagged immediately after import.
+* Step 17 added ledger cash movement extraction for selected cash accounts.
+* Step 17 converts debit lines to Cash into positive bank-comparable movements.
+* Step 17 converts credit lines to Cash into negative bank-comparable movements.
+* Step 17 supports inclusive start and end date filtering for ledger cash movements.
+* Step 17 excludes reversed original entries and reversal entries by default, with an audit-inclusive option.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -57,68 +62,85 @@ Current summary:
 * Duplicate imported bank rows are flagged with deterministic `duplicate_group_id` values.
 * Duplicate detection returns a computed `duplicate_reason` without adding a new schema column.
 * Duplicate detection supports row-hash, external-ID, and transaction-fingerprint rules.
+* Ledger cash movement extraction returns stable movement IDs, journal entry references, journal line references, cash account metadata, signed integer amounts, and reversal metadata.
 * Duplicate detection precedence is row hash, then external ID, then transaction fingerprint.
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
-* Ledger cash movement extraction, reconciliation matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
+* Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
+* Reconciliation matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
 
-Completed Step 16 files:
+Completed Step 17 files:
 
 ```text
-src/reconcile/imports/duplicate_detection.py
-src/reconcile/imports/bank_csv.py
-src/reconcile/imports/__init__.py
-tests/test_bank_duplicate_detection.py
+src/reconcile/reconciliation/__init__.py
+src/reconcile/reconciliation/cash_movements.py
+tests/test_cash_movements.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 16 summary:
+Completed Step 17 summary:
 
-* Added `src/reconcile/imports/duplicate_detection.py`.
-* Added `build_duplicate_group_id(reason, key)`.
-* Added `detect_duplicate_bank_transactions(connection, import_id=None)`.
-* Added `mark_duplicate_bank_transactions(connection, import_id=None)`.
-* Implemented non-mutating duplicate detection.
-* Implemented duplicate marking that clears and recalculates `duplicate_group_id` values for the selected scope.
-* Supported scoped duplicate detection by `import_id`.
-* Supported global duplicate detection when `import_id` is omitted.
-* Added validation that blank `import_id` arguments raise `ValidationError`.
-* Implemented Rule A duplicate detection by duplicate `row_hash`.
-* Implemented Rule B duplicate detection by duplicate nonblank `external_id`.
-* Implemented Rule C duplicate detection by duplicate transaction fingerprint.
-* Defined transaction fingerprint as `transaction_date`, `amount_cents`, and `description_normalized`.
-* Implemented duplicate precedence so row hash wins over external ID and fingerprint.
-* Implemented duplicate precedence so external ID wins over fingerprint when row hash does not apply.
-* Ensured each duplicate bank transaction receives at most one duplicate group ID.
-* Used deterministic SHA-256 hashing for duplicate group IDs.
-* Avoided Python's built-in `hash()`.
-* Returned duplicate rows with `duplicate_group_id` and computed `duplicate_reason`.
-* Returned duplicate rows in deterministic order by duplicate group, transaction date, and transaction ID.
-* Updated bank CSV import to call duplicate marking after a successful import.
-* Kept `import_bank_statement_csv` returning only the import ID.
-* Kept bank imports preserving raw descriptions, normalized descriptions, dates, amounts, external IDs, check numbers, row hashes, and source rows.
-* Updated import package exports to include duplicate detection functions.
-* Added `tests/test_bank_duplicate_detection.py`.
-* Tested row-hash duplicate groups.
-* Tested external-ID duplicate groups.
-* Tested blank and `NULL` external IDs are ignored.
-* Tested transaction-fingerprint duplicate groups.
-* Tested near-fingerprint rows are not grouped.
-* Tested duplicate-rule precedence.
-* Tested detection versus marking behavior.
-* Tested idempotent marking.
-* Tested recalculation after adding another duplicate.
-* Tested import integration.
-* Tested scoped versus global duplicate detection.
-* Tested duplicate detection across multiple imports.
-* Tested empty-bank-transaction behavior.
-* Tested invalid blank `import_id` handling.
-* Tested duplicate detection does not append ledger events.
-* Tested duplicate detection does not modify accounting projection tables.
-* Fixed accidental `src/reconcile/imports/_init_.py` filename issue so the real package initializer is `src/reconcile/imports/__init__.py`.
-* Fixed ruff import ordering.
-* Did not add ledger cash movement extraction, reconciliation matching, fuzzy scoring, split matching, categorization, dashboard, full CLI workflow, report exports, cash flow, or bank import events.
+* Added `src/reconcile/reconciliation/__init__.py`.
+* Added `src/reconcile/reconciliation/cash_movements.py`.
+* Added `extract_ledger_cash_movements(connection, *, cash_account_id, start_date=None, end_date=None, include_reversed=False)`.
+* Added `get_cash_account(connection, cash_account_id)`.
+* Exported only Step 17 cash movement helpers from the reconciliation package.
+* Implemented ledger cash movement extraction from posted journal lines touching the selected cash account.
+* Used journal entry header data from `journal_entries`.
+* Used journal line data from `journal_entry_lines`.
+* Used cash account metadata from `accounts`.
+* Returned plain dictionaries rather than models or pandas objects.
+* Used integer cents only.
+* Implemented bank-comparable sign convention.
+* Converted debit lines to the selected Cash account into positive `amount_cents`.
+* Converted credit lines to the selected Cash account into negative `amount_cents`.
+* Ignored non-cash journal lines.
+* Returned deterministic `ledger_cash_movement_id` values based on journal line IDs.
+* Returned journal entry IDs and journal entry line IDs.
+* Returned ISO date strings for `entry_date`.
+* Returned journal entry descriptions and line descriptions.
+* Returned cash account ID, code, and name.
+* Returned source and external reference fields as `None` because those values are not stored in the current journal projection tables.
+* Returned reversal metadata fields in every movement row.
+* Implemented inclusive `start_date` and `end_date` filtering.
+* Validated date arguments as `datetime.date` instances.
+* Rejected `datetime.datetime` values for date filters.
+* Rejected invalid date ranges where `start_date > end_date`.
+* Validated `cash_account_id` as a nonblank string.
+* Validated that the selected cash account exists.
+* Validated that the selected cash account has `account_type='asset'`.
+* Validated that the selected cash account has `normal_balance='debit'`.
+* Allowed inactive asset/debit cash accounts for historical extraction.
+* Excluded original reversed entries by default.
+* Excluded reversal entries by default.
+* Added `include_reversed=True` support to include both original reversed entries and reversal entries for audit review.
+* Marked reversal rows with `is_reversal=True`.
+* Preserved `reversal_of_entry_id` and `reversed_by_entry_id` values in returned rows.
+* Sorted movement rows by `entry_date`, `journal_entry_id`, and `journal_entry_line_id`.
+* Validated stored journal line side values read from the database.
+* Validated stored journal line amount values read from the database.
+* Ensured extraction does not append ledger events.
+* Ensured extraction does not modify accounting projection tables.
+* Ensured extraction does not modify bank transaction tables.
+* Added `tests/test_cash_movements.py`.
+* Tested empty extraction with a valid cash account.
+* Tested debit-to-Cash positive movement behavior.
+* Tested credit-to-Cash negative movement behavior.
+* Tested non-cash lines are ignored.
+* Tested deterministic movement ordering.
+* Tested returned movement metadata and stable IDs.
+* Tested inclusive start and end date filtering.
+* Tested invalid date arguments and invalid date ranges.
+* Tested cash account validation for blank, missing, non-asset, and credit-normal accounts.
+* Tested inactive cash account historical readability.
+* Tested default reversal exclusion behavior.
+* Tested audit-inclusive reversal behavior with `include_reversed=True`.
+* Tested reversal signs and reversal metadata.
+* Tested read-only safety for events, accounting projections, and bank tables.
+* Tested invalid stored side and invalid stored amount handling.
+* Fixed test calls to match the existing `reverse_journal_entry` signature using `reversal_entry_id`.
+* Did not add exact reconciliation matching, fuzzy scoring, split matching, reconciliation runs, reconciliation match records, categorization, dashboard, full CLI workflow, report exports, cash flow, or new accounting features.
 
-Commands run for Step 16:
+Commands run for Step 17:
 
 ```bash
 python -m pytest
@@ -128,15 +150,15 @@ python -m ruff check .
 Results:
 
 ```text
-python -m pytest        # 403 passed in 64.67s (0:01:04)
+python -m pytest        # 429 passed in 66.79s (0:01:06)
 python -m ruff check .  # All checks passed!
 ```
 
 Next planned step:
 
-Step 17 — Add ledger cash movement extraction.
+Step 18 — Add exact reconciliation matching.
 
-Step 17 status: Not started.
+Step 18 status: Not started.
 
 ---
 
@@ -3708,23 +3730,101 @@ Add bank duplicate detection
 
 ### Step 17 — Add ledger cash movement extraction
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Convert journal entries touching Cash into bank-comparable ledger cash movements.
+* Extract bank-comparable ledger cash movements from posted journal lines that touch a selected cash account.
 
-Expected work:
+Completed work:
 
-* Add cash movement extraction module.
-* Support selected cash account.
-* Convert debit to Cash as positive amount.
-* Convert credit to Cash as negative amount.
-* Include journal entry and line references.
-* Exclude reversed entries appropriately if design requires.
-* Add tests.
+* Added `src/reconcile/reconciliation/__init__.py`.
+* Added `src/reconcile/reconciliation/cash_movements.py`.
+* Added `extract_ledger_cash_movements(connection, *, cash_account_id, start_date=None, end_date=None, include_reversed=False)`.
+* Added `get_cash_account(connection, cash_account_id)`.
+* Exported only Step 17 cash movement helpers from the reconciliation package.
+* Implemented ledger cash movement extraction from `journal_entry_lines` joined to `journal_entries`.
+* Included only lines where `journal_entry_lines.account_id == cash_account_id`.
+* Used selected cash account metadata from `accounts`.
+* Returned plain dictionaries.
+* Used integer cents only.
+* Did not format dollars.
+* Did not use pandas.
+* Did not write files.
+* Did not print.
+* Did not mutate any tables.
+* Did not append events.
+* Did not rebuild projections inside extraction.
+* Converted debit lines to the selected Cash account into positive bank-comparable `amount_cents`.
+* Converted credit lines to the selected Cash account into negative bank-comparable `amount_cents`.
+* Ignored non-cash journal lines.
+* Returned `ledger_cash_movement_id` values using deterministic `cashmov-{journal_entry_line_id}` format.
+* Returned journal entry IDs and journal entry line IDs.
+* Returned `entry_date` values as ISO date strings.
+* Returned journal entry descriptions and line descriptions.
+* Returned cash account ID, cash account code, and cash account name.
+* Returned `side`, signed `amount_cents`, `source`, `external_reference`, `is_reversal`, `reversal_of_entry_id`, and `reversed_by_entry_id`.
+* Returned `source` and `external_reference` as `None` because the current journal projection tables do not store those fields.
+* Implemented inclusive `start_date` filtering.
+* Implemented inclusive `end_date` filtering.
+* Implemented inclusive combined date range filtering.
+* Validated that date filter arguments are `datetime.date` instances when provided.
+* Rejected `datetime.datetime` values for date filters.
+* Rejected `start_date > end_date`.
+* Validated `cash_account_id` as a nonblank string.
+* Validated selected cash account existence.
+* Validated selected cash account `account_type='asset'`.
+* Validated selected cash account `normal_balance='debit'`.
+* Allowed inactive asset/debit cash accounts for historical extraction.
+* Excluded original reversed entries by default.
+* Excluded reversal entries by default.
+* Added `include_reversed=True` support to include original reversed entries and reversal entries for audit review.
+* Marked reversal journal entry movements with `is_reversal=True`.
+* Marked ordinary/original journal entry movements with `is_reversal=False`.
+* Preserved `reversed_by_entry_id` on original reversed rows.
+* Preserved `reversal_of_entry_id` on reversal rows.
+* Sorted movement rows by `entry_date`, `journal_entry_id`, and `journal_entry_line_id`.
+* Validated stored journal line side values read from the database.
+* Validated stored journal line amount values read from the database.
+* Added `tests/test_cash_movements.py`.
+* Tested empty database extraction with a valid cash account.
+* Tested debit-to-Cash positive movement behavior.
+* Tested credit-to-Cash negative movement behavior.
+* Tested non-cash journal lines are ignored.
+* Tested deterministic date, entry, and line ordering.
+* Tested returned movement row includes journal entry ID and journal line ID.
+* Tested returned movement row includes cash account ID, code, and name.
+* Tested returned movement row includes description and line description.
+* Tested returned movement ID is deterministic.
+* Tested start date filtering.
+* Tested end date filtering.
+* Tested inclusive date ranges.
+* Tested `start_date=end_date`.
+* Tested invalid date ranges.
+* Tested string date argument rejection.
+* Tested `datetime.datetime` argument rejection.
+* Tested blank cash account ID rejection.
+* Tested missing cash account rejection.
+* Tested non-asset selected account rejection.
+* Tested credit-normal selected account rejection.
+* Tested inactive asset/debit cash account historical readability.
+* Tested default exclusion of original reversed entries.
+* Tested default exclusion of reversal entries.
+* Tested `include_reversed=True` includes original reversed entries.
+* Tested `include_reversed=True` includes reversal entries.
+* Tested reversal cash movement has the opposite sign from the original.
+* Tested reversal rows include `is_reversal=True`.
+* Tested original reversed rows include `reversed_by_entry_id`.
+* Tested reversal rows include `reversal_of_entry_id`.
+* Tested extraction does not append ledger events.
+* Tested extraction does not modify accounting projection tables.
+* Tested extraction does not modify bank transaction tables.
+* Tested invalid stored journal line side raises `ValidationError`.
+* Tested invalid stored journal line amount raises `ValidationError`.
+* Fixed test calls to match the existing `reverse_journal_entry` signature using `reversal_entry_id`.
+* Did not add exact reconciliation matching, fuzzy reconciliation scoring, split matching, reconciliation run creation, reconciliation match records, manual match confirmation/rejection, categorization, dashboard, full CLI workflow, CSV exports, cash flow, or new accounting features.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/reconciliation/__init__.py
@@ -3733,26 +3833,38 @@ tests/test_cash_movements.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Match scoring
-* Split matching
-* Dashboard
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
 ```
 
+Results:
+
+```text
+python -m pytest        # 429 passed in 66.79s (0:01:06)
+python -m ruff check .  # All checks passed!
+```
+
 Definition of done:
 
-* Cash debits become positive movements.
-* Cash credits become negative movements.
+* `src/reconcile/reconciliation/__init__.py` exists.
+* `src/reconcile/reconciliation/cash_movements.py` exists.
+* `extract_ledger_cash_movements` exists.
+* Debit lines to the selected cash account become positive cash movements.
+* Credit lines to the selected cash account become negative cash movements.
 * Non-cash lines are ignored.
-* Tests pass.
+* Date filters work inclusively.
+* Cash account validation works.
+* Reversal handling works with default effective-only behavior and optional audit-inclusive behavior.
+* Returned movement rows include stable IDs and useful journal/account metadata.
+* Extraction is read-only and does not mutate events, accounting projections, or bank transaction tables.
+* No reconciliation matching, scoring, split matching, categorization, dashboard, CLI, exports, or cash flow work was added.
+* `tests/test_cash_movements.py` covers extraction, signs, filtering, account validation, reversal handling, ordering, and read-only safety.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
