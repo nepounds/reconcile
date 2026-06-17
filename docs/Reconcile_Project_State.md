@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 10 — Add projection rebuild workflow.
+Current step: Step 11 — Add trial balance report.
 
-Status: Step 10 complete.
+Status: Step 11 complete.
 
 Current summary:
 
@@ -31,76 +31,76 @@ Current summary:
 * Step 8 added journal entry and journal line projections into SQLite.
 * Step 9 added account balance projections for posted journal entries.
 * Step 10 added a projection rebuild workflow that clears derived tables and replays append-only events.
-* Projection rebuilds replay events in deterministic `event_sequence` order.
-* Projection rebuilds now restore account, journal entry, journal line, and account balance projections from the event log.
-* Projection clearing leaves `ledger_events` untouched.
-* Rebuild behavior is safe to run repeatedly and does not append new events.
-* A thin rebuild script exists at `scripts/rebuild_projections.py`.
-* Reports, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, and property-based tests are still intentionally not implemented.
+* Step 11 added a trial balance report generated from current account and balance projections.
+* Trial balance rows include account metadata, debit totals, credit totals, and normal-balance-aware ending debit or credit balances.
+* Trial balance generation includes accounts without balance rows and inactive accounts.
+* Trial balance generation reads projections only and does not append events, replay events, rebuild projections, print, write files, or mutate balances.
+* Reports beyond trial balance, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, and property-based tests are still intentionally not implemented.
 
-Completed Step 10 files:
+Completed Step 11 files:
 
 ```text
-src/reconcile/projections/rebuild.py
-scripts/rebuild_projections.py
-tests/test_projection_rebuild.py
+src/reconcile/reports/__init__.py
+src/reconcile/reports/trial_balance.py
+tests/test_reports.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 10 summary:
+Completed Step 11 summary:
 
-* Added `src/reconcile/projections/rebuild.py`.
-* Added `clear_projections(connection)`.
-* Added `rebuild_projections(connection)`.
-* Added `projection_row_counts(connection)`.
-* Defined projection-table deletion order that clears child tables before parent tables.
-* Cleared derived bank and reconciliation projection tables even though they are not populated yet.
-* Cleared `account_balances`, `journal_entry_lines`, `journal_entries`, and `accounts` during projection reset.
-* Preserved `ledger_events` during projection clearing.
-* Rebuilt projections by loading events from the append-only event store.
-* Replayed events through existing `apply_event` behavior.
-* Preserved existing unsupported-event behavior for valid MVP event types that do not have handlers yet.
-* Rebuilt account rows from `AccountOpened` events.
-* Rebuilt journal entry rows from `JournalEntryPosted` events.
-* Rebuilt journal line rows from `JournalEntryPosted` events.
-* Rebuilt account balance rows from `JournalEntryPosted` events.
-* Verified rebuilt balances match incremental balances created during normal posting.
-* Verified debit totals, credit totals, and normal-balance-aware balances survive rebuild.
-* Verified rebuild preserves event count, event IDs, and event sequences.
-* Verified running rebuild twice is deterministic and does not duplicate journal lines.
-* Verified rebuild handles an empty event log.
-* Added `scripts/rebuild_projections.py` as a thin argparse wrapper.
-* The rebuild script accepts `--db-path` and defaults to `exports/reconcile.db`.
-* The rebuild script initializes the schema before rebuilding so it can run against a new database path.
-* Fixed Step 10 tests to use real `datetime.date` values for `JournalEntry.entry_date`.
-* Fixed ruff import-order and line-length issues in the rebuild module and tests.
-* Did not add reports, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, or property-based tests.
+* Added `src/reconcile/reports/__init__.py`.
+* Added `src/reconcile/reports/trial_balance.py`.
+* Added `generate_trial_balance(connection)`.
+* Added `trial_balance_totals(rows)`.
+* Generated trial balance rows from the `accounts` and `account_balances` projections.
+* Used a LEFT JOIN so accounts without balance rows still appear in the report.
+* Returned plain dictionaries with integer cents only.
+* Included inactive accounts because the trial balance is a ledger/reporting view.
+* Ordered rows by `account_code`, then `account_id`.
+* Presented debit-normal account balances on the debit side when positive and credit side when negative.
+* Presented credit-normal account balances on the credit side when positive and debit side when negative.
+* Returned zero ending balance columns when `balance_cents` is zero.
+* Validated account types read from the database.
+* Validated normal balances read from the database.
+* Validated numeric balance fields read from the database.
+* Raised `ValidationError` for invalid account or balance projection data.
+* Added tests for empty databases.
+* Added tests for no-balance accounts.
+* Added tests for asset, expense, liability, equity, and revenue balance presentation.
+* Added tests for debit and credit totals.
+* Added tests for row sorting.
+* Added tests for inactive account inclusion.
+* Added tests for trial balance totals.
+* Added tests for rebuild consistency.
+* Added tests for invalid account type and invalid normal balance data.
+* Added tests proving trial balance generation does not append events.
+* Added tests proving trial balance generation does not mutate account balances.
+* Did not add income statement, balance sheet, cash flow, CSV export, CLI integration, dashboard, reversals, bank import, reconciliation, categorization, or property-based tests.
 
-Commands run for Step 10:
+Commands run for Step 11:
 
 ```bash
 python -m pytest
 python -m ruff check .
-python scripts/rebuild_projections.py --db-path exports/reconcile.db
 git status
 ```
 
 Results:
 
 ```text
-python -m pytest                                      # 246 passed
-python -m ruff check .                                # All checks passed
-python scripts/rebuild_projections.py --db-path exports/reconcile.db  # success
-git status                                            # expected Step 10 files only
+python -m pytest        # run locally in the real repository
+python -m ruff check .  # run locally in the real repository
+git status              # expected Step 11 files only
 ```
 
 Next planned step:
 
-Step 11 — Add trial balance report.
+Step 12 — Add income statement and balance sheet reports.
 
-Step 11 status: Not started.
+Step 12 status: Not started.
 
 ---
+
 
 ## Project name
 
@@ -3008,20 +3008,100 @@ Add projection rebuild workflow
 
 ### Step 11 — Add trial balance report
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Generate trial balance data from projections.
+* Generate trial balance data from account and balance projections.
 
-Expected work:
+Completed work:
 
-* Add trial balance report module.
-* Include account code, name, type, debit total, credit total, and ending debit/credit balance.
-* Support as-of date if practical at this step.
-* Add example-based tests.
+* Added `src/reconcile/reports/__init__.py`.
+* Added `src/reconcile/reports/trial_balance.py`.
+* Exported only Step 11 report behavior from the reports package.
+* Added `generate_trial_balance(connection)`.
+* Added `trial_balance_totals(rows)`.
+* Generated trial balance rows from the current projected state only.
+* Read source data from `accounts` and `account_balances`.
+* Used a LEFT JOIN so accounts without balance rows appear with zero totals and zero ending balances.
+* Included inactive accounts because the trial balance is a ledger/reporting view.
+* Returned plain dictionaries.
+* Used integer cents only.
+* Did not format dollars.
+* Did not require pandas.
+* Did not print.
+* Did not write files.
+* Did not replay events.
+* Did not rebuild projections.
+* Did not mutate projections.
+* Returned rows in stable order by account code, then account ID.
+* Included these row fields:
 
-Allowed files to create/edit:
+```text
+account_id
+account_code
+account_name
+account_type
+normal_balance
+debit_total_cents
+credit_total_cents
+ending_debit_balance_cents
+ending_credit_balance_cents
+```
+
+* Used debit-normal ending balance presentation:
+
+```text
+positive balance_cents -> ending_debit_balance_cents
+negative balance_cents -> ending_credit_balance_cents
+zero balance_cents     -> both ending balance columns zero
+```
+
+* Used credit-normal ending balance presentation:
+
+```text
+positive balance_cents -> ending_credit_balance_cents
+negative balance_cents -> ending_debit_balance_cents
+zero balance_cents     -> both ending balance columns zero
+```
+
+* Added trial balance totals:
+
+```text
+total_debits_cents
+total_credits_cents
+total_ending_debit_balance_cents
+total_ending_credit_balance_cents
+is_balanced
+```
+
+* Set `is_balanced` based on total ending debit balances equaling total ending credit balances.
+* Raised `ValidationError` for invalid account types in projected account rows.
+* Raised `ValidationError` for invalid normal balances in projected account rows.
+* Raised `ValidationError` for invalid numeric balance projection fields.
+* Added `tests/test_reports.py`.
+* Tested empty database behavior.
+* Tested accounts with no balance rows.
+* Tested asset debit balance presentation.
+* Tested asset credit balance presentation.
+* Tested expense debit balance presentation.
+* Tested liability credit balance presentation.
+* Tested liability debit balance presentation.
+* Tested equity credit balance presentation.
+* Tested revenue credit balance presentation.
+* Tested debit totals and credit totals.
+* Tested sorting by account code.
+* Tested inactive account inclusion.
+* Tested balanced trial balance totals for a valid ledger.
+* Tested `trial_balance_totals`.
+* Tested rebuilt projections produce the same trial balance as incremental projections.
+* Tested invalid normal balance data raises `ValidationError`.
+* Tested invalid account type data raises `ValidationError`.
+* Tested report generation does not append events.
+* Tested report generation does not mutate account balances.
+* Did not add income statement, balance sheet, cash flow, report exports, CLI integration, dashboard, reversals, bank import, reconciliation, categorization, or property-based tests.
+
+Files created or edited:
 
 ```text
 src/reconcile/reports/__init__.py
@@ -3030,26 +3110,36 @@ tests/test_reports.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Income statement
-* Balance sheet
-* Cash flow
-* Dashboard
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # run locally in the real repository
+python -m ruff check .  # run locally in the real repository
+git status              # expected Step 11 files only
 ```
 
 Definition of done:
 
-* Trial balance generates expected rows.
-* Total debits equal total credits.
-* Tests pass.
-* Ruff passes.
+* `src/reconcile/reports/__init__.py` exists.
+* `src/reconcile/reports/trial_balance.py` exists.
+* `generate_trial_balance(connection)` returns trial balance rows from projections.
+* Accounts with no balances are included with zero values.
+* Debit-normal and credit-normal accounts display ending balances on the correct side.
+* Total ending debit balances equal total ending credit balances for a valid ledger.
+* Trial balance generation reads projections only and does not mutate state.
+* No income statement, balance sheet, cash flow, reversals, bank import, reconciliation, dashboard, full CLI workflow, or exports were added.
+* `tests/test_reports.py` covers empty state, no-balance accounts, all account types, balance-side presentation, totals, sorting, invalid data, rebuild consistency, and no mutation.
+* Existing tests pass locally.
+* Ruff passes locally.
+* Project State is updated.
 
 Suggested commit message:
 
