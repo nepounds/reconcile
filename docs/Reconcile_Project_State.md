@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 18 — Add exact reconciliation matching.
+Current step: Step 19 — Add fuzzy reconciliation scoring and ambiguity handling.
 
-Status: Step 18 complete.
+Status: Step 19 complete.
 
-Approximate project completion: 58% to 60%.
+Approximate project completion: 62% to 64%.
 
 Current summary:
 
@@ -53,6 +53,13 @@ Current summary:
 * Step 18 enforces one-to-one ledger movement use within a reconciliation run.
 * Step 18 leaves unmatched bank transactions clearly marked as unmatched.
 * Step 18 blocks duplicate-flagged bank transactions from unsafe auto-matching.
+* Step 19 added fuzzy reconciliation scoring for amount, date, and description candidates.
+* Step 19 added fuzzy reconciliation run behavior with configurable amount tolerance and date windows.
+* Step 19 stores fuzzy score components and explanations on reconciliation match records.
+* Step 19 distinguishes fuzzy auto-matched, candidate, ambiguous, and unmatched decisions.
+* Step 19 prevents unsafe auto-matches when top candidates are too close.
+* Step 19 applies duplicate penalties and blocks duplicate-flagged bank rows from fuzzy auto-matching.
+* Step 19 enforces one-to-one ledger movement use for fuzzy auto-matches within a run.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -76,7 +83,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Fuzzy reconciliation scoring, ambiguity scoring rules, split matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
+* Split matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -193,11 +200,77 @@ python -m pytest        # 441 passed in 72.82s (0:01:12)
 python -m ruff check .  # All checks passed!
 ```
 
+Completed Step 19 files:
+
+```text
+src/reconcile/reconciliation/scoring.py
+src/reconcile/reconciliation/models.py
+src/reconcile/reconciliation/explanations.py
+src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/__init__.py
+tests/test_reconciliation_fuzzy.py
+docs/Reconciliation_Design.md
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 19 summary:
+
+* Added `src/reconcile/reconciliation/scoring.py`.
+* Added `days_between`.
+* Added `score_amount_match` with exact, tolerance, sign, and invalid-input handling.
+* Added `score_date_match` with exact, date-window, and invalid-input handling.
+* Added `score_description_match` with deterministic standard-library normalization and token-overlap scoring.
+* Added `score_reconciliation_candidate` using amount, date, description, and duplicate-penalty components.
+* Added fuzzy match type and ambiguous match status constants.
+* Added `build_fuzzy_match_explanation` for JSON-serializable fuzzy match explanations.
+* Preserved Step 18 exact and unmatched explanation builders.
+* Added `run_fuzzy_reconciliation`.
+* Preserved `run_exact_reconciliation` behavior.
+* Stored fuzzy reconciliation run configuration in `config_json`.
+* Selected bank transactions inside the statement date range.
+* Used `extract_ledger_cash_movements` for ledger-side cash movement selection.
+* Generated fuzzy candidates only when signs match, amount delta is within tolerance, and date delta is within the configured window.
+* Scored fuzzy candidates with amount, date, description, amount delta, date delta, and duplicate penalty details.
+* Added fuzzy auto-match threshold behavior.
+* Added fuzzy candidate threshold behavior.
+* Added ambiguous status behavior when high-scoring top candidates are too close.
+* Blocked duplicate-flagged bank transactions from fuzzy auto-matching.
+* Created ledger-link rows for fuzzy auto-matches only.
+* Confirmed candidate, ambiguous, and unmatched fuzzy records do not create ledger-link rows.
+* Enforced that one ledger cash movement can be consumed by at most one fuzzy auto-match in the same run.
+* Added deterministic fuzzy candidate ordering.
+* Added fuzzy reconciliation summary counts.
+* Added `tests/test_reconciliation_fuzzy.py`.
+* Tested amount scoring, date scoring, description scoring, candidate scoring, duplicate penalties, score clamping, fuzzy auto-matches, candidates, ambiguity handling, duplicate handling, one-to-one safety, run configuration, validation errors, and mutation safety.
+* Updated `docs/Reconciliation_Design.md` to document implemented exact and fuzzy reconciliation behavior.
+* Documented that split matching remains future work.
+* Did not add split matching, manual review, categorization, dashboard, CLI integration, report exports, cash flow, or new accounting features.
+
+Commands run for Step 19:
+
+```bash
+python -m pytest tests/test_reconciliation_fuzzy.py
+python -m ruff check . --fix
+python -m ruff check .
+python -m pytest
+git status
+```
+
+Results:
+
+```text
+python -m pytest tests/test_reconciliation_fuzzy.py  # passed locally
+python -m ruff check . --fix                        # fixed import ordering
+python -m ruff check .                              # All checks passed
+python -m pytest                                    # passed locally
+git status                                          # expected Step 19 files only
+```
+
 Next planned step:
 
-Step 19 — Add fuzzy reconciliation scoring and ambiguity handling.
+Step 20 — Add split reconciliation matching.
 
-Step 19 status: Not started.
+Step 20 status: Not started.
 
 ---
 
@@ -4033,55 +4106,152 @@ Add exact reconciliation matching
 
 ### Step 19 — Add fuzzy reconciliation scoring and ambiguity handling
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Score amount/date/description candidates and prevent unsafe auto-matches.
 
-Expected work:
+Completed work:
 
-* Add scoring module.
-* Implement amount score.
-* Implement date score.
-* Implement description score.
-* Implement duplicate penalty.
-* Implement score thresholds.
-* Implement top-candidate gap rule.
-* Store explanation JSON.
-* Add tests.
+* Added `src/reconcile/reconciliation/scoring.py`.
+* Added `days_between`.
+* Added `score_amount_match`.
+* Added `score_date_match`.
+* Added `score_description_match`.
+* Added `score_reconciliation_candidate`.
+* Implemented amount scoring with exact-match, same-sign tolerance, opposite-sign rejection, out-of-tolerance rejection, integer-cent validation, and negative-tolerance validation.
+* Implemented date scoring with exact-match, date-window tolerance, out-of-window rejection, `datetime.datetime` rejection, non-date rejection, and negative-window validation.
+* Implemented deterministic description scoring with standard-library normalization, case-insensitive matching, whitespace normalization, simple punctuation cleanup, exact normalized matches, containment matches, token-overlap partial scoring, and missing-description handling.
+* Implemented candidate scoring using the default formula:
 
-Allowed files to create/edit:
+```text
+score = amount_score * 0.60
+      + date_score * 0.25
+      + description_score * 0.15
+      - duplicate_penalty
+```
+
+* Clamped final candidate scores between `0.0` and `100.0`.
+* Added meaningful duplicate penalty behavior for duplicate-flagged bank transactions.
+* Added fuzzy match type constant `fuzzy`.
+* Added ambiguous match status constant `ambiguous`.
+* Preserved exact and unmatched match constants.
+* Preserved exact, candidate, auto-matched, and unmatched statuses.
+* Added `build_fuzzy_match_explanation`.
+* Preserved existing exact and unmatched explanation builders.
+* Included score, amount score, date score, description score, amount delta, date delta, duplicate penalty, decision status, auto-match flag, and reason text in fuzzy explanations.
+* Added `run_fuzzy_reconciliation` to `src/reconcile/reconciliation/matcher.py`.
+* Preserved `run_exact_reconciliation` behavior.
+* Added fuzzy run argument validation.
+* Validated negative amount tolerance and date windows.
+* Validated threshold ranges and threshold ordering.
+* Inserted completed reconciliation run rows for fuzzy runs.
+* Stored fuzzy run configuration in `config_json`.
+* Selected bank transactions inside the statement date range.
+* Used `extract_ledger_cash_movements` for ledger-side cash movement selection.
+* Generated fuzzy candidates only when amount signs matched.
+* Generated fuzzy candidates only when amount deltas were within tolerance.
+* Generated fuzzy candidates only when date deltas were within the configured window.
+* Used exact signed integer cents for amount deltas.
+* Used signed day differences for date deltas.
+* Used normalized or raw bank descriptions and ledger entry or line descriptions for description scoring.
+* Ordered fuzzy candidates deterministically by score, amount delta, date delta, movement ID, journal entry ID, and line ID.
+* Added fuzzy auto-match behavior when top score meets threshold and score gap is sufficient.
+* Added fuzzy candidate behavior when score meets candidate threshold but not auto-match threshold.
+* Added ambiguous behavior when top candidates are too close for safe auto-matching.
+* Added unmatched behavior when no candidates exist or the top candidate score is too low.
+* Blocked duplicate-flagged bank transactions from fuzzy auto-matching.
+* Added clear duplicate explanation behavior for duplicate-flagged bank rows.
+* Created ledger-link rows for fuzzy auto-matches only.
+* Confirmed candidate fuzzy records do not create ledger-link rows.
+* Confirmed ambiguous fuzzy records do not create ledger-link rows.
+* Confirmed unmatched fuzzy records do not create ledger-link rows.
+* Enforced that a ledger cash movement can be consumed by at most one fuzzy auto-match in the same run.
+* Ensured candidate and ambiguous rows do not consume ledger movements.
+* Ensured each bank transaction receives at most one fuzzy match record in Step 19.
+* Updated `src/reconcile/reconciliation/__init__.py` to export Step 19 scoring and fuzzy reconciliation functions.
+* Preserved Step 17 cash movement exports.
+* Preserved Step 18 exact reconciliation exports.
+* Updated `docs/Reconciliation_Design.md` to document implemented exact reconciliation and fuzzy reconciliation behavior.
+* Documented fuzzy scoring formula, amount scoring, date scoring, description scoring, duplicate penalty behavior, thresholds, ledger-link behavior, one-to-one safety, and mutation safety.
+* Documented that split matching remains future work.
+* Added `tests/test_reconciliation_fuzzy.py`.
+* Tested scoring unit behavior.
+* Tested fuzzy auto-match behavior for exact-like matches.
+* Tested amount-tolerance fuzzy matching.
+* Tested date-window fuzzy matching.
+* Tested that description similarity cannot override bad amount candidates.
+* Tested date-window rejection.
+* Tested candidate status behavior.
+* Tested ambiguous status behavior.
+* Tested ledger-link creation for fuzzy auto-matches.
+* Tested no ledger-link creation for candidate and ambiguous matches.
+* Tested duplicate-flagged bank rows do not auto-match.
+* Tested duplicate explanations include penalty or duplicate context.
+* Tested one-to-one ledger movement safety.
+* Tested deterministic fuzzy matching behavior.
+* Tested fuzzy run creation, run ID behavior, config JSON, invalid date ranges, invalid thresholds, and invalid tolerance/window values.
+* Tested fuzzy reconciliation does not append ledger events.
+* Tested fuzzy reconciliation does not modify bank transaction rows.
+* Tested fuzzy reconciliation does not modify accounting projection tables.
+* Fixed ruff import-order issues with `python -m ruff check . --fix`.
+* Did not add split matching, manual confirmation/rejection, categorization, dashboard, full CLI workflow, CSV exports, cash flow, or bank import events.
+
+Files created or edited:
 
 ```text
 src/reconcile/reconciliation/scoring.py
-src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/models.py
 src/reconcile/reconciliation/explanations.py
+src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/__init__.py
 tests/test_reconciliation_fuzzy.py
 docs/Reconciliation_Design.md
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Split matching
-* Manual review UI
-* ML categorization
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
+python -m pytest tests/test_reconciliation_fuzzy.py
+python -m ruff check . --fix
 python -m ruff check .
+python -m pytest
+git status
+```
+
+Results:
+
+```text
+python -m pytest tests/test_reconciliation_fuzzy.py  # passed locally
+python -m ruff check . --fix                        # fixed import ordering
+python -m ruff check .                              # All checks passed
+python -m pytest                                    # passed locally
+git status                                          # expected Step 19 files only
 ```
 
 Definition of done:
 
-* Fuzzy candidates score correctly.
-* Ambiguous candidates are not auto-matched.
-* Explanation includes component scores.
-* Tests pass.
-* Ruff passes.
+* `src/reconcile/reconciliation/scoring.py` exists.
+* Amount scoring works.
+* Date scoring works.
+* Description scoring works.
+* Candidate scoring works with configured weights and duplicate penalty.
+* `run_fuzzy_reconciliation` exists.
+* Fuzzy reconciliation stores reconciliation runs, match records, explanations, and ledger-link rows for auto-matches.
+* Fuzzy reconciliation distinguishes auto-matched, candidate, ambiguous, and unmatched statuses.
+* Ambiguous matches are not auto-matched.
+* Candidate and ambiguous matches do not create ledger-link rows.
+* Duplicate-flagged bank rows are not unsafe auto-matched.
+* Ledger movements are not reused across fuzzy auto-matches.
+* Exact reconciliation behavior from Step 18 still works.
+* `docs/Reconciliation_Design.md` documents fuzzy scoring accurately.
+* No split matching, categorization, dashboard, CLI, CSV export, or cash flow work was added.
+* `tests/test_reconciliation_fuzzy.py` covers scoring, fuzzy matching, ambiguity handling, duplicate penalty, run config, and mutation safety.
+* Existing tests pass locally.
+* Ruff passes locally.
+* Project State is updated.
 
 Suggested commit message:
 

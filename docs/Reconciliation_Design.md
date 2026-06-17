@@ -1,10 +1,24 @@
 # Reconcile Reconciliation Design
 
-This document defines the planned bank reconciliation design. Step 0 does not implement reconciliation yet.
+This document describes the reconciliation behavior currently implemented in
+Reconcile.
+
+## Current implementation status
+
+Reconcile currently supports exact reconciliation and fuzzy reconciliation.
+
+Exact reconciliation matches imported bank transactions to ledger cash
+movements using exact signed integer cents and exact transaction dates.
+
+Fuzzy reconciliation adds configurable amount tolerance, date windows,
+description scoring, duplicate penalties, candidate scoring, and ambiguity
+handling.
+
+Split reconciliation is still future work.
 
 ## Bank transaction sign convention
 
-Imported bank transactions will use the bank-sign convention:
+Imported bank transactions use the bank-sign convention:
 
 ```text
 Deposit or inflow = positive
@@ -18,40 +32,51 @@ Owner deposit: +500000 cents
 Software payment: -5000 cents
 ```
 
-Money will use integer cents.
+Money uses integer cents.
 
 ## Ledger cash movement rules
 
-Ledger cash movements are planned to be derived from journal lines that touch the selected cash account.
+Ledger cash movements are derived from journal lines that touch the selected
+cash account.
 
 Rules:
 
 - Debit to Cash becomes a positive ledger cash movement.
 - Credit to Cash becomes a negative ledger cash movement.
 - Non-cash journal lines are not bank-comparable cash movements.
-- Ledger cash movement records should include the journal entry and line references.
+- Ledger cash movement records include journal entry and line references.
 
-## Exact matching plan
+## Exact reconciliation
 
-Exact matching will run before fuzzy matching.
+Exact reconciliation matches one bank transaction to one ledger cash movement
+only when:
 
-A planned exact match requires:
+- The signed amount cents match exactly.
+- The bank transaction date equals the ledger entry date.
+- The bank transaction is not duplicate-flagged.
+- The ledger cash movement has not already been consumed in the same run.
 
-- Same amount in cents.
-- Same sign.
-- Same date, or a clearly configured exact-like date tolerance.
-- Unmatched bank transaction.
-- Unmatched ledger cash movement.
+Exact auto-matches create reconciliation match rows and ledger-link rows.
 
-Exact matches should still store or return an explanation.
+Unmatched and candidate records do not create ledger-link rows.
 
-## Fuzzy matching plan
+## Fuzzy reconciliation
 
-Fuzzy matching will score candidates using amount, date, description, and duplicate information.
+Fuzzy reconciliation evaluates one bank transaction against one ledger cash
+movement at a time.
 
-Amount should matter most. Description similarity should not override a poor amount match.
+It considers a ledger movement only when:
 
-Default planned scoring:
+- The bank amount and ledger amount have the same sign.
+- The amount delta is within the configured amount tolerance.
+- The date delta is within the configured date window.
+- The ledger movement has not already been consumed by an auto-match.
+
+Fuzzy reconciliation does not implement split matching.
+
+## Fuzzy scoring formula
+
+Fuzzy candidate scoring uses this formula:
 
 ```text
 score = amount_score * 0.60
@@ -60,116 +85,140 @@ score = amount_score * 0.60
       - duplicate_penalty
 ```
 
-Default planned thresholds:
+Final scores are clamped between 0.0 and 100.0.
+
+## Amount scoring
+
+Amount scoring uses signed integer cents.
+
+- Exact same amount scores 100.0.
+- Opposite signs score 0.0.
+- Amounts outside the configured tolerance score 0.0.
+- Amounts within tolerance receive a partial score.
+- Smaller amount deltas score higher than larger amount deltas.
+
+The default fuzzy amount tolerance is 5 cents.
+
+## Date scoring
+
+Date scoring compares the bank transaction date to the ledger entry date.
+
+- Exact same date scores 100.0.
+- Dates outside the configured date window score 0.0.
+- Dates inside the date window receive a partial score.
+- Smaller date deltas score higher than larger date deltas.
+
+The default fuzzy date window is 3 days.
+
+## Description scoring
+
+Description scoring uses deterministic standard-library text normalization.
+
+The implementation lowercases descriptions, removes simple punctuation
+differences, collapses repeated whitespace, and compares token overlap.
+
+- Missing descriptions score 0.0.
+- Exact normalized descriptions score 100.0.
+- Partial token overlap receives partial credit.
+- No token overlap scores 0.0.
+
+Description scoring can improve ranking, but it cannot override an invalid
+amount candidate because candidates outside the amount tolerance are not
+considered.
+
+## Duplicate penalty behavior
+
+Duplicate-flagged bank transactions receive a score penalty.
+
+Duplicate-flagged bank transactions cannot be auto-matched by fuzzy
+reconciliation. They may become candidate, ambiguous, or unmatched records,
+but they are not linked to ledger movements automatically.
+
+## Fuzzy decision thresholds
+
+Default thresholds:
 
 ```text
-score >= 95 and score gap >= 10:
+auto_match_threshold = 95.0
+candidate_threshold = 80.0
+ambiguity_gap = 10.0
+```
+
+Decision rules:
+
+```text
+top score >= auto_match_threshold
+and gap between top and second candidate >= ambiguity_gap
+and bank transaction is not duplicate-flagged:
     auto_matched
 
-80 <= score < 95:
-    candidate
-
-score >= 95 but top candidates are close:
+top score >= auto_match_threshold
+and second candidate is too close:
     ambiguous
 
-score < 80:
+candidate_threshold <= top score < auto_match_threshold:
+    candidate
+
+top score < candidate_threshold:
+    unmatched
+
+no candidates:
     unmatched
 ```
 
-Default planned date window:
+## Ledger-link behavior
 
-```text
-3 days before/after
-```
+Only auto-matched records create rows in
+`reconciliation_match_ledger_links`.
 
-Default planned amount tolerance:
+Candidate, ambiguous, and unmatched rows do not create ledger-link rows.
 
-```text
-1 cent for exact-like matching
-5 cents for configurable fuzzy tolerance
-```
+## One-to-one safety
 
-## Duplicate handling
+A ledger cash movement can be consumed by at most one fuzzy auto-match in the
+same reconciliation run.
 
-Duplicate imported bank transactions will be flagged, not deleted.
+Candidate and ambiguous records do not consume ledger movements.
 
-Planned duplicate signals:
+## Explanation storage
 
-- Same external ID where available.
-- Same date, amount, and normalized description.
-- Same row hash.
+Every reconciliation match stores JSON explanation data.
 
-Duplicate records should include a duplicate group ID or explanation where useful.
+Fuzzy explanations include:
 
-## Split matching constraints
-
-Split matching will support one bank transaction matched to two or three ledger cash movements.
-
-Planned constraints:
-
-- Only combine two or three ledger movements.
-- Only combine same-sign movements.
-- Only combine unmatched movements.
-- Only search within the date window.
-- Only accept combinations that sum to the bank amount within tolerance.
-- Do not implement unlimited subset-sum search in the MVP.
-
-Default planned split scoring:
-
-```text
-score = amount_score * 0.70
-      + date_score * 0.25
-      + description_score * 0.05
-      - split_penalty
-```
-
-## Ambiguity handling
-
-Ambiguous matches are not auto-confirmed.
-
-A match should be marked ambiguous when:
-
-- Two or more candidates have close scores.
-- Two or more candidates can explain the same bank transaction equally well.
-- A split and a single match both look plausible.
-- Duplicate bank rows make the result unsafe.
-
-Ambiguous results should be presented for review with explanations.
-
-## Match scoring formula
-
-The MVP scoring plan is:
-
-```text
-score = amount_score * 0.60
-      + date_score * 0.25
-      + description_score * 0.15
-      - duplicate_penalty
-```
-
-Component expectations:
-
-- `amount_score` should strongly reward exact amount matches.
-- `date_score` should reward nearby dates within the configured window.
-- `description_score` should help ranking but should not dominate.
-- `duplicate_penalty` should reduce confidence for flagged duplicate bank rows.
-
-## Explanation requirements
-
-Every reconciliation decision should store or display why it was made.
-
-Planned explanation fields:
-
-- Match type.
-- Match status.
-- Amount delta in cents.
-- Date delta in days.
+- Candidate score.
 - Amount score.
 - Date score.
 - Description score.
-- Duplicate penalty, if any.
-- Final score.
-- Reason for auto-match, candidate, ambiguous, rejected, or unmatched status.
-- Linked ledger movement IDs, if applicable.
+- Amount delta in cents.
+- Date delta in days.
+- Duplicate penalty.
+- Decision status.
+- Whether the record was auto-matched.
+- Reason text.
+- Top candidate summary.
+- Near candidate summary when applicable.
 
-The goal is not just to match transactions. The goal is to make the match reviewable.
+## Mutation safety
+
+Fuzzy reconciliation writes only to reconciliation tables:
+
+- `reconciliation_runs`
+- `reconciliation_matches`
+- `reconciliation_match_ledger_links`
+
+It does not append ledger events.
+
+It does not modify bank transaction rows.
+
+It does not modify accounting projection tables.
+
+## Future work
+
+The following reconciliation features are not implemented yet:
+
+- Split reconciliation matching.
+- Manual confirmation and rejection workflow.
+- Reconciliation review UI.
+- CSV export of reconciliation results.
+- Cash flow reporting.
