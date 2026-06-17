@@ -601,7 +601,7 @@ def test_unsupported_future_event_behavior_remains_consistent(
     connection = _connection(tmp_path)
     unsupported_event = LedgerEvent(
         event_id="event-unsupported",
-        event_type="JournalEntryReversed",
+        event_type="BankStatementImported",
         event_version=1,
         event_timestamp="2026-01-01T00:00:00",
         effective_date="2026-01-01",

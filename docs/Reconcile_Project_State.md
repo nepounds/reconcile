@@ -10,15 +10,17 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 12 — Add income statement and balance sheet reports.
+Current step: Step 14 — Add property-based accounting invariant tests.
 
-Status: Step 12 complete.
+Status: Step 14 complete.
+
+Approximate project completion: 46% to 48%.
 
 Current summary:
 
 * Reconcile has its initial Python package skeleton under `src/reconcile/`.
 * `pyproject.toml` is the dependency source of truth.
-* Development tooling is limited to pytest and ruff.
+* Development tooling now includes pytest, ruff, and Hypothesis.
 * The package import smoke test passed in Step 1.
 * Fake demo input CSV files exist for the chart of accounts, journal entries, and bank statement.
 * Step 2 added the custom exception hierarchy and integer-cents money helpers.
@@ -33,6 +35,8 @@ Current summary:
 * Step 10 added a projection rebuild workflow that clears derived tables and replays append-only events.
 * Step 11 added a trial balance report from account projections.
 * Step 12 added income statement and balance sheet reports from posted journal entries and lines.
+* Step 13 added journal reversal behavior through immutable `JournalEntryReversed` events.
+* Step 14 added property-based accounting invariant tests with Hypothesis.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -41,87 +45,90 @@ Current summary:
 * Balance sheets include asset, liability, and equity account sections.
 * Balance sheets include current period net income as an equity-like amount before closing entries exist.
 * Balance sheets do not rely only on cumulative `account_balances` for as-of-date reporting.
+* Journal reversals create opposite debit/credit lines while preserving original posted entries and original activity totals.
+* Journal reversals mark the original posted entry with `reversed_by_entry_id` and mark the reversal entry with `reversal_of_entry_id`.
+* Projection rebuilds replay `JournalEntryReversed` events and restore reversal state and balances.
+* Property tests generate many valid accounting scenarios and verify core accounting laws still hold.
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
-* Reversals, cash flow, bank import, reconciliation, categorization, dashboard, full CLI workflow, CSV exports, and property-based tests are still intentionally not implemented.
+* Cash flow, bank import, reconciliation, categorization, dashboard, full CLI workflow, and CSV exports are still intentionally not implemented.
 
-Completed Step 12 files:
+Completed Step 14 files:
 
 ```text
-src/reconcile/reports/income_statement.py
-src/reconcile/reports/balance_sheet.py
-src/reconcile/reports/__init__.py
-tests/test_reports.py
+pyproject.toml
+docs/Accounting_Invariants.md
 docs/Reconcile_Project_State.md
+tests/property/conftest.py
+tests/property/test_accounting_invariants.py
+tests/property/test_replay_invariants.py
+tests/property/test_reversal_invariants.py
+tests/test_projection_rebuild.py
 ```
 
-Completed Step 12 summary:
+Completed Step 14 summary:
 
-* Added `src/reconcile/reports/income_statement.py`.
-* Added `generate_income_statement(connection, *, start_date, end_date)`.
-* Added `income_statement_totals(rows)`.
-* Added `src/reconcile/reports/balance_sheet.py`.
-* Added `generate_balance_sheet(connection, *, as_of_date)`.
-* Updated `src/reconcile/reports/__init__.py` to export Step 11 and Step 12 report functions.
-* Preserved Step 11 trial balance exports.
-* Implemented inclusive date-range filtering for income statements.
-* Implemented as-of-date filtering for balance sheets using posted journal entries and journal lines.
-* Implemented income statement account sections for revenue and expense accounts.
-* Implemented revenue totals as credits minus debits.
-* Implemented expense totals as debits minus credits.
-* Implemented net income as revenue minus expenses.
-* Implemented balance sheet account sections for asset, liability, and equity accounts.
-* Included inactive asset, liability, and equity accounts in the balance sheet.
-* Excluded revenue and expense accounts from balance sheet account sections.
-* Included current period net income in total equity.
-* Calculated total liabilities and equity as liabilities plus equity including current period net income.
-* Returned `is_balanced` based on total assets equaling total liabilities and equity.
-* Added validation for report date arguments.
-* Rejected string and `datetime.datetime` report dates.
-* Rejected start dates after end dates for income statements.
-* Validated account types read from SQLite.
-* Validated normal balances read from SQLite for balance sheet reporting.
-* Validated journal line sides read from SQLite.
-* Used integer cents only.
-* Did not use pandas.
-* Did not write report files.
-* Did not print from report functions.
-* Did not rebuild projections inside report functions.
-* Added Step 12 report tests to `tests/test_reports.py` while preserving Step 11 trial balance tests.
-* Tested empty income statements and balance sheets.
-* Tested revenue credits, revenue debits, expense debits, and expense credits.
-* Tested income statement net income calculation.
-* Tested income statement date filtering before, on, and after report dates.
-* Tested balance sheet asset, liability, and equity normal-balance behavior.
-* Tested current period net income flowing into equity.
-* Tested as-of-date filtering for same-day and later entries.
-* Tested invalid database account types, normal balances, and journal line sides.
-* Tested that report generation does not append events.
-* Tested that report generation does not mutate account balance projections.
-* Tested that rebuilt projections produce the same Step 12 report results as incremental projections.
-* Fixed ruff import-order, duplicate-import, and line-length issues.
-* Did not add cash flow, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, CSV exports, or property-based tests.
+* Added Hypothesis to the project development dependencies.
+* Added and updated `docs/Accounting_Invariants.md`.
+* Added `tests/property/` property-test suite.
+* Added shared property-test helpers in `tests/property/conftest.py`.
+* Added generated account definitions for asset, liability, equity, revenue, and expense accounts.
+* Added Hypothesis strategies for valid two-line postings.
+* Added Hypothesis strategies for generated posting sequences.
+* Added generated valid journal entry helpers.
+* Added generated intentionally unbalanced journal entry helpers.
+* Added fresh SQLite database creation per Hypothesis example to avoid fixture reuse pollution.
+* Added property tests proving generated balanced journal entries validate.
+* Added property tests proving generated unbalanced journal entries raise `ValidationError`.
+* Added property tests proving posted generated entries keep the trial balance balanced.
+* Added property tests proving valid posting sequences keep the trial balance balanced.
+* Added property tests proving invalid generated entries do not enter the event store.
+* Added property tests proving the expanded accounting equation holds before closing entries.
+* Added property tests proving projection rebuilds restore the same account balances.
+* Added property tests proving projection rebuilds restore the same trial balance.
+* Added property tests proving rebuilds do not change event count.
+* Added property tests proving rebuilds do not change event IDs.
+* Added property tests proving rebuilds do not change event sequences.
+* Added property tests proving running rebuild twice is deterministic.
+* Added property tests proving event replay is deterministic when ordered by `event_sequence`.
+* Added property tests proving reversing generated entries removes net account balance impact.
+* Added property tests proving reversals preserve activity totals by adding opposite-side activity.
+* Added property tests proving reversals keep the trial balance balanced.
+* Added property tests proving rebuild after reversals restores incremental balances.
+* Added property tests proving reversing valid generated entries creates linked reversal entries.
+* Added property tests proving original journal entries are preserved after reversal.
+* Added property tests proving generated reversal entries point back to the original entry.
+* Added property tests proving reversing the same generated entry twice raises `ValidationError`.
+* Updated `tests/test_projection_rebuild.py` so the unsupported future event example uses `BankStatementImported`, because `JournalEntryReversed` is now supported after Step 13.
+* Fixed Hypothesis decorator keyword usage for generated examples.
+* Fixed Hypothesis function-scoped fixture health checks.
+* Fixed property helper database reuse by creating a fresh database file per generated example.
+* Fixed property tests to call `post_journal_entry(connection, journal_entry)` using the real service signature.
+* Fixed ruff import ordering in property tests.
+* Did not add bank import, duplicate detection, reconciliation, categorization, dashboard, full CLI workflow, cash flow, or CSV exports.
 
-Commands run for Step 12:
+Commands run for Step 14:
 
 ```bash
-python -m pytest
+python -m pip install -e ".[dev]"
 python -m ruff check .
+python -m pytest
 git status
 ```
 
 Results:
 
 ```text
-python -m pytest        # 292 passed
-python -m ruff check .  # All checks passed
-git status              # expected Step 12 files only
+python -m pip install -e ".[dev]"  # success; Hypothesis installed
+python -m ruff check .             # All checks passed!
+python -m pytest                   # 335 passed in 71.13s (0:01:11)
+git status                         # expected Step 14 files plus Step 13/14 projection rebuild cleanup
 ```
 
 Next planned step:
 
-Step 13 — Add journal reversal behavior.
+Step 15 — Add bank CSV import and normalization.
 
-Step 13 status: Not started.
+Step 15 status: Not started.
 
 ---
 
@@ -3225,23 +3232,49 @@ Add income statement and balance sheet reports
 
 ### Step 13 — Add journal reversal behavior
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Reverse posted journal entries through reversal events.
+* Reverse posted journal entries through immutable reversal events.
 
-Expected work:
+Completed work:
 
-* Implement `reverse_journal_entry`.
-* Create opposite debit/credit lines.
-* Append `JournalEntryReversed` event.
-* Create reversal journal entry projection.
-* Mark original entry as reversed in projection.
-* Preserve original event history.
-* Add tests.
+* Implemented `reverse_journal_entry` in `src/reconcile/journal/service.py`.
+* Loaded original posted journal entries and lines from existing projections.
+* Rejected blank original journal entry IDs.
+* Rejected missing original journal entries.
+* Rejected non-posted original journal entries.
+* Rejected already reversed original journal entries.
+* Rejected attempts to reverse reversal entries.
+* Rejected duplicate reversal journal entry IDs before appending a reversal event.
+* Defaulted reversal date to the original journal entry date when no reversal date is provided.
+* Supported explicit reversal journal entry IDs.
+* Supported explicit reversal dates.
+* Built reversal journal entries with the same account IDs and amount cents as the original.
+* Flipped reversal line sides from debit to credit and credit to debit.
+* Preserved original line ordering in reversal lines.
+* Used deterministic reversal line IDs based on reversal entry ID and line number.
+* Preserved reversal line descriptions from original journal lines.
+* Created clear default reversal descriptions referencing the original entry.
+* Validated reversal journal entries before appending events.
+* Appended `JournalEntryReversed` events.
+* Included complete reversal event payloads needed for projection rebuilds.
+* Preserved source, actor, and correlation ID metadata on reversal events.
+* Added `JournalEntryReversed` support in `src/reconcile/events/handlers.py`.
+* Inserted reversal journal entry projections from reversal events.
+* Inserted reversal journal line projections from reversal events.
+* Updated original journal entry projections with `reversed_by_entry_id`.
+* Marked reversal journal entry projections with `reversal_of_entry_id`.
+* Applied reversal line activity to account balances.
+* Preserved historical debit and credit activity totals instead of erasing original activity.
+* Ensured reversal events replay correctly during projection rebuilds.
+* Ensured existing reports reflect reversal activity without report-specific reversal logic.
+* Updated stale unsupported-event coverage now that `JournalEntryReversed` is supported.
+* Fixed UTC timestamp usage in journal services.
+* Fixed ruff import-order, duplicate-import, and unused-import issues.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/journal/service.py
@@ -3250,27 +3283,40 @@ tests/test_journal_reversals.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Bank reconciliation
-* Dashboard
-* ML categorization
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # 314 passed
+python -m ruff check .  # All checks passed
+git status              # expected Step 13 files only
 ```
 
 Definition of done:
 
-* Posted entries can be reversed.
-* Reversal lines flip debit/credit sides.
-* Net account impact is zero.
-* Original entry is not deleted.
-* Tests pass.
+* Posted journal entries can be reversed.
+* Reversal lines flip debit and credit sides.
+* Reversal lines preserve account IDs, amount cents, line order, and descriptions.
+* Original journal entries are not deleted or mutated into the reversal.
+* Original journal lines are not changed.
+* Original journal entry projections record `reversed_by_entry_id`.
+* Reversal journal entry projections record `reversal_of_entry_id`.
+* Reversal events are immutable and rebuildable.
+* Projection rebuild restores reversal entries, reversal links, and account balances.
+* Net account impact can be neutralized by reversals without erasing original debit and credit totals.
+* Existing reports reflect reversal activity.
+* Invalid reversal attempts do not append events.
+* `tests/test_journal_reversals.py` covers service behavior, handler behavior, rebuild behavior, report behavior, and validation errors.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
@@ -3282,45 +3328,108 @@ Add journal reversal events
 
 ### Step 14 — Add property-based accounting invariant tests
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Use Hypothesis to test core accounting invariants across generated ledgers.
 
-Expected work:
+Completed work:
 
-* Add Hypothesis dependency.
-* Add generated account/journal strategies.
-* Test trial balance invariant.
-* Test expanded accounting equation.
-* Test replay invariant.
-* Test reversal neutrality.
-* Test invalid entries never reach event store.
-* Document invariant tests.
+* Added Hypothesis dependency to the development dependency set.
+* Added `docs/Accounting_Invariants.md` documentation.
+* Added shared property-test helper code in `tests/property/conftest.py`.
+* Added generated standard chart-of-accounts helpers covering asset, liability, equity, revenue, and expense accounts.
+* Added generated posting strategies for valid two-line journal entries.
+* Added generated posting sequence strategies for multi-entry ledgers.
+* Added helpers for creating balanced generated journal entries.
+* Added helpers for creating intentionally unbalanced generated journal entries.
+* Added fresh SQLite database creation per Hypothesis example to prevent state leakage between generated inputs.
+* Added property tests for core accounting invariants.
+* Added property tests for projection replay determinism.
+* Added property tests for reversal invariants.
+* Updated unsupported-future-event projection rebuild coverage to use `BankStatementImported`, because `JournalEntryReversed` is now supported.
+* Fixed Hypothesis decorator keyword usage.
+* Fixed Hypothesis function-scoped fixture health checks.
+* Fixed property helper database reuse across generated examples.
+* Fixed property-test calls to `post_journal_entry` to use the actual service signature.
+* Fixed ruff import sorting.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
+pyproject.toml
+docs/Accounting_Invariants.md
+docs/Reconcile_Project_State.md
+tests/property/conftest.py
+tests/property/test_accounting_invariants.py
+tests/property/test_replay_invariants.py
+tests/property/test_reversal_invariants.py
+tests/test_projection_rebuild.py
+```
+
+Property tests added:
+
+* Generated balanced journal entries validate successfully.
+* Generated unbalanced journal entries raise `ValidationError`.
+* Generated valid posted entries keep the trial balance balanced.
+* Generated sequences of valid posted entries keep the trial balance balanced.
+* Invalid generated entries do not enter the event store.
+* Generated posted entries keep the expanded accounting equation balanced.
+* Rebuilding generated posted entries restores the same account balances.
+* Rebuilding generated posted entries restores the same trial balance.
+* Rebuilding generated posted entries does not change event count.
+* Rebuilding generated posted entries does not change event IDs.
+* Rebuilding generated posted entries does not change event sequences.
+* Running rebuild twice is deterministic.
+* Generated event replay is deterministic when ordered by sequence.
+* Reversing generated posted entries removes net account balance impact.
+* Reversals preserve activity totals by adding opposite-side activity.
+* Reversing generated posted entries keeps the trial balance balanced.
+* Rebuilding after generated reversals restores incremental balances.
+* Reversing any valid generated entry creates a linked reversal entry.
+* Original entries are preserved after generated reversals.
+* Generated reversal entries point back to original entries.
+* Attempting to reverse the same generated entry twice raises `ValidationError`.
+
+Allowed files created/edited:
+
+```text
+pyproject.toml
+tests/property/conftest.py
 tests/property/test_accounting_invariants.py
 tests/property/test_replay_invariants.py
 tests/property/test_reversal_invariants.py
 docs/Accounting_Invariants.md
 docs/Reconcile_Project_State.md
-pyproject.toml
+tests/test_projection_rebuild.py
 ```
 
 Do not implement yet:
 
 * Bank import
+* Duplicate detection
 * Reconciliation
+* Categorization
 * Dashboard
+* Full CLI workflow
+* CSV exports
+* Cash flow
 
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
+python -m pip install -e ".[dev]"
 python -m ruff check .
+python -m pytest
+git status
+```
+
+Validation results:
+
+```text
+python -m ruff check .  # All checks passed!
+python -m pytest        # 335 passed in 71.13s (0:01:11)
 ```
 
 Definition of done:
@@ -3329,6 +3438,7 @@ Definition of done:
 * Invariant docs explain the tests in plain English.
 * Tests pass.
 * Ruff passes.
+* Project State is regenerated without compressing prior project history.
 
 Suggested commit message:
 
