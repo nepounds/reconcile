@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import datetime
 
 from reconcile.events.models import LedgerEvent
@@ -21,6 +22,10 @@ def apply_event(connection: sqlite3.Connection, event: LedgerEvent) -> None:
     if event.event_type == "JournalEntryPosted":
         _apply_journal_entry_posted(connection, event)
         apply_journal_entry_posted_to_balances(connection, event)
+        return
+    
+    if event.event_type == "JournalEntryReversed":
+        _apply_journal_entry_reversed(connection, event)
         return
 
     raise ValidationError(f"unsupported event type: {event.event_type}")
@@ -308,3 +313,188 @@ def _require_payload_fields(
         raise ValidationError(
             f"missing fields in event payload: {', '.join(missing_fields)}"
         )
+    
+
+def _apply_journal_entry_reversed(
+    connection: sqlite3.Connection,
+    event: LedgerEvent,
+) -> None:
+    payload = event.payload
+
+    original_id = payload.get("original_journal_entry_id")
+    reversal_id = payload.get("reversal_journal_entry_id")
+    reversal_date = payload.get("reversal_date")
+    description = payload.get("description")
+    lines = payload.get("lines")
+
+    if not isinstance(original_id, str) or not original_id.strip():
+        raise ValidationError("reversal event missing original_journal_entry_id")
+
+    if not isinstance(reversal_id, str) or not reversal_id.strip():
+        raise ValidationError("reversal event missing reversal_journal_entry_id")
+
+    if not isinstance(reversal_date, str) or not reversal_date.strip():
+        raise ValidationError("reversal event missing reversal_date")
+
+    if not isinstance(description, str) or not description.strip():
+        raise ValidationError("reversal event missing description")
+
+    if not isinstance(lines, list) or not lines:
+        raise ValidationError("reversal event must include lines")
+
+    original = connection.execute(
+        """
+        SELECT journal_entry_id, status, reversed_by_entry_id, reversal_of_entry_id
+        FROM journal_entries
+        WHERE journal_entry_id = ?
+        """,
+        (original_id,),
+    ).fetchone()
+
+    if original is None:
+        raise ValidationError("original journal entry does not exist")
+
+    if original["status"] != "posted":
+        raise ValidationError("only posted journal entries can be reversed")
+
+    if original["reversed_by_entry_id"] is not None:
+        raise ValidationError("journal entry has already been reversed")
+
+    if original["reversal_of_entry_id"] is not None:
+        raise ValidationError("reversal entries cannot be reversed")
+
+    duplicate_reversal = connection.execute(
+        """
+        SELECT 1
+        FROM journal_entries
+        WHERE journal_entry_id = ?
+        """,
+        (reversal_id,),
+    ).fetchone()
+
+    if duplicate_reversal is not None:
+        raise ValidationError("reversal journal entry already exists")
+
+    seen_line_ids: set[str] = set()
+    validated_lines: list[dict[str, object]] = []
+
+    for line in lines:
+        if not isinstance(line, dict):
+            raise ValidationError("invalid reversal line payload")
+
+        line_id = line.get("line_id")
+        line_journal_entry_id = line.get("journal_entry_id")
+        account_id = line.get("account_id")
+        side = line.get("side")
+        amount_cents = line.get("amount_cents")
+        line_number = line.get("line_number")
+
+        if not isinstance(line_id, str) or not line_id.strip():
+            raise ValidationError("reversal line missing line_id")
+
+        if line_id in seen_line_ids:
+            raise ValidationError("duplicate reversal line_id")
+
+        seen_line_ids.add(line_id)
+
+        if line_journal_entry_id != reversal_id:
+            raise ValidationError("reversal line journal_entry_id mismatch")
+
+        if not isinstance(account_id, str) or not account_id.strip():
+            raise ValidationError("reversal line missing account_id")
+
+        if side not in {"debit", "credit"}:
+            raise ValidationError("invalid reversal line side")
+
+        if (
+            not isinstance(amount_cents, int)
+            or isinstance(amount_cents, bool)
+            or amount_cents <= 0
+        ):
+            raise ValidationError("invalid reversal line amount_cents")
+
+        if (
+            not isinstance(line_number, int)
+            or isinstance(line_number, bool)
+            or line_number <= 0
+        ):
+            raise ValidationError("invalid reversal line line_number")
+
+        validated_lines.append(line)
+
+    connection.execute(
+        """
+        INSERT INTO journal_entries (
+            journal_entry_id,
+            event_id,
+            entry_date,
+            description,
+            status,
+            reversed_by_entry_id,
+            reversal_of_entry_id,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            reversal_id,
+            event.event_id,
+            reversal_date,
+            description,
+            "posted",
+            None,
+            original_id,
+            event.created_at,
+        ),
+    )
+
+    for line in validated_lines:
+        connection.execute(
+            """
+            INSERT INTO journal_entry_lines (
+                line_id,
+                journal_entry_id,
+                account_id,
+                side,
+                amount_cents,
+                description,
+                line_number
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                line["line_id"],
+                line["journal_entry_id"],
+                line["account_id"],
+                line["side"],
+                line["amount_cents"],
+                line.get("description"),
+                line["line_number"],
+            ),
+        )
+
+    connection.execute(
+        """
+        UPDATE journal_entries
+        SET reversed_by_entry_id = ?
+        WHERE journal_entry_id = ?
+        """,
+        (reversal_id, original_id),
+    )
+
+    balance_event = replace(
+        event,
+        event_type="JournalEntryPosted",
+        payload={
+            "journal_entry_id": reversal_id,
+            "entry_date": reversal_date,
+            "description": description,
+            "source": payload.get("source", event.source),
+            "external_reference": payload.get("external_reference"),
+            "lines": validated_lines,
+        },
+    )
+
+    apply_journal_entry_posted_to_balances(connection, balance_event)
+
+    connection.commit()

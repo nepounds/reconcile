@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from reconcile.events.handlers import apply_event
@@ -248,3 +248,179 @@ def _validate_required_string(value: str, field_name: str) -> str:
         raise ValidationError(f"{field_name} cannot be blank")
 
     return clean_value
+
+
+def reverse_journal_entry(
+    connection: sqlite3.Connection,
+    journal_entry_id: str,
+    *,
+    reversal_entry_id: str | None = None,
+    reversal_date: date | None = None,
+    description: str | None = None,
+    source: str = "manual",
+    actor: str | None = None,
+    correlation_id: str | None = None,
+) -> JournalEntry:
+    """Reverse a posted journal entry through an immutable reversal event."""
+    if not isinstance(journal_entry_id, str) or not journal_entry_id.strip():
+        raise ValidationError("journal_entry_id cannot be blank")
+
+    original_id = journal_entry_id.strip()
+
+    original = connection.execute(
+        """
+        SELECT
+            journal_entry_id,
+            entry_date,
+            description,
+            status,
+            reversed_by_entry_id,
+            reversal_of_entry_id
+        FROM journal_entries
+        WHERE journal_entry_id = ?
+        """,
+        (original_id,),
+    ).fetchone()
+
+    if original is None:
+        raise ValidationError("original journal entry does not exist")
+
+    if original["status"] != "posted":
+        raise ValidationError("only posted journal entries can be reversed")
+
+    if original["reversed_by_entry_id"] is not None:
+        raise ValidationError("journal entry has already been reversed")
+
+    if original["reversal_of_entry_id"] is not None:
+        raise ValidationError("reversal entries cannot be reversed")
+
+    if reversal_date is None:
+        effective_reversal_date = date.fromisoformat(original["entry_date"])
+    elif isinstance(reversal_date, datetime) or not isinstance(reversal_date, date):
+        raise ValidationError("reversal_date must be a date")
+    else:
+        effective_reversal_date = reversal_date
+
+    if reversal_entry_id is None:
+        final_reversal_id = f"REV-{uuid4()}"
+    elif not isinstance(reversal_entry_id, str) or not reversal_entry_id.strip():
+        raise ValidationError("reversal_entry_id cannot be blank")
+    else:
+        final_reversal_id = reversal_entry_id.strip()
+
+    existing_reversal = connection.execute(
+        """
+        SELECT 1
+        FROM journal_entries
+        WHERE journal_entry_id = ?
+        """,
+        (final_reversal_id,),
+    ).fetchone()
+
+    if existing_reversal is not None:
+        raise ValidationError("reversal journal entry already exists")
+
+    original_lines = connection.execute(
+        """
+        SELECT
+            line_id,
+            journal_entry_id,
+            account_id,
+            side,
+            amount_cents,
+            description,
+            line_number
+        FROM journal_entry_lines
+        WHERE journal_entry_id = ?
+        ORDER BY line_number ASC, line_id ASC
+        """,
+        (original_id,),
+    ).fetchall()
+
+    if not original_lines:
+        raise ValidationError("original journal entry has no lines")
+
+    final_description = (
+        description.strip()
+        if isinstance(description, str) and description.strip()
+        else f"Reversal of {original_id}: {original['description']}"
+    )
+
+    if description is not None and (
+        not isinstance(description, str) or not description.strip()
+    ):
+        raise ValidationError("description cannot be blank")
+
+    reversal_lines: list[JournalLine] = []
+
+    for original_line in original_lines:
+        if original_line["side"] == "debit":
+            reversal_side = "credit"
+        elif original_line["side"] == "credit":
+            reversal_side = "debit"
+        else:
+            raise ValidationError("invalid original journal line side")
+
+        line_number = int(original_line["line_number"])
+
+        reversal_lines.append(
+            JournalLine(
+                line_id=f"{final_reversal_id}-line-{line_number}",
+                journal_entry_id=final_reversal_id,
+                account_id=original_line["account_id"],
+                side=reversal_side,
+                amount_cents=int(original_line["amount_cents"]),
+                description=original_line["description"],
+                line_number=line_number,
+            )
+        )
+
+    reversal_entry = JournalEntry(
+        journal_entry_id=final_reversal_id,
+        entry_date=effective_reversal_date,
+        description=final_description,
+        lines=reversal_lines,
+        source=source,
+        external_reference=original_id,
+    )
+    validate_journal_entry(reversal_entry)
+
+    now = datetime.now(UTC).isoformat()
+
+    event = LedgerEvent(
+        event_id=f"event-{uuid4()}",
+        event_type="JournalEntryReversed",
+        event_version=1,
+        event_timestamp=now,
+        effective_date=effective_reversal_date.isoformat(),
+        source=source,
+        actor=actor,
+        correlation_id=correlation_id,
+        causation_id=None,
+        payload={
+            "original_journal_entry_id": original_id,
+            "reversal_journal_entry_id": final_reversal_id,
+            "reversal_date": effective_reversal_date.isoformat(),
+            "description": final_description,
+            "source": source,
+            "external_reference": original_id,
+            "lines": [
+                {
+                    "line_id": line.line_id,
+                    "journal_entry_id": line.journal_entry_id,
+                    "account_id": line.account_id,
+                    "side": line.side,
+                    "amount_cents": line.amount_cents,
+                    "description": line.description,
+                    "line_number": line.line_number,
+                }
+                for line in reversal_lines
+            ],
+        },
+        created_at=now,
+    )
+
+    stored_event = append_event(connection, event)
+    apply_event(connection, stored_event)
+
+    return reversal_entry
