@@ -10,9 +10,9 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 11 — Add trial balance report.
+Current step: Step 12 — Add income statement and balance sheet reports.
 
-Status: Step 11 complete.
+Status: Step 12 complete.
 
 Current summary:
 
@@ -31,53 +31,77 @@ Current summary:
 * Step 8 added journal entry and journal line projections into SQLite.
 * Step 9 added account balance projections for posted journal entries.
 * Step 10 added a projection rebuild workflow that clears derived tables and replays append-only events.
-* Step 11 added a trial balance report generated from current account and balance projections.
-* Trial balance rows include account metadata, debit totals, credit totals, and normal-balance-aware ending debit or credit balances.
-* Trial balance generation includes accounts without balance rows and inactive accounts.
-* Trial balance generation reads projections only and does not append events, replay events, rebuild projections, print, write files, or mutate balances.
-* Reports beyond trial balance, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, and property-based tests are still intentionally not implemented.
+* Step 11 added a trial balance report from account projections.
+* Step 12 added income statement and balance sheet reports from posted journal entries and lines.
+* Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
+* Income statements support inclusive start and end dates.
+* Income statements include revenue and expense accounts only.
+* Income statements calculate revenue as credits minus debits and expenses as debits minus credits.
+* Balance sheets support an as-of date by reading posted journal lines through that date.
+* Balance sheets include asset, liability, and equity account sections.
+* Balance sheets include current period net income as an equity-like amount before closing entries exist.
+* Balance sheets do not rely only on cumulative `account_balances` for as-of-date reporting.
+* Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
+* Reversals, cash flow, bank import, reconciliation, categorization, dashboard, full CLI workflow, CSV exports, and property-based tests are still intentionally not implemented.
 
-Completed Step 11 files:
+Completed Step 12 files:
 
 ```text
+src/reconcile/reports/income_statement.py
+src/reconcile/reports/balance_sheet.py
 src/reconcile/reports/__init__.py
-src/reconcile/reports/trial_balance.py
 tests/test_reports.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 11 summary:
+Completed Step 12 summary:
 
-* Added `src/reconcile/reports/__init__.py`.
-* Added `src/reconcile/reports/trial_balance.py`.
-* Added `generate_trial_balance(connection)`.
-* Added `trial_balance_totals(rows)`.
-* Generated trial balance rows from the `accounts` and `account_balances` projections.
-* Used a LEFT JOIN so accounts without balance rows still appear in the report.
-* Returned plain dictionaries with integer cents only.
-* Included inactive accounts because the trial balance is a ledger/reporting view.
-* Ordered rows by `account_code`, then `account_id`.
-* Presented debit-normal account balances on the debit side when positive and credit side when negative.
-* Presented credit-normal account balances on the credit side when positive and debit side when negative.
-* Returned zero ending balance columns when `balance_cents` is zero.
-* Validated account types read from the database.
-* Validated normal balances read from the database.
-* Validated numeric balance fields read from the database.
-* Raised `ValidationError` for invalid account or balance projection data.
-* Added tests for empty databases.
-* Added tests for no-balance accounts.
-* Added tests for asset, expense, liability, equity, and revenue balance presentation.
-* Added tests for debit and credit totals.
-* Added tests for row sorting.
-* Added tests for inactive account inclusion.
-* Added tests for trial balance totals.
-* Added tests for rebuild consistency.
-* Added tests for invalid account type and invalid normal balance data.
-* Added tests proving trial balance generation does not append events.
-* Added tests proving trial balance generation does not mutate account balances.
-* Did not add income statement, balance sheet, cash flow, CSV export, CLI integration, dashboard, reversals, bank import, reconciliation, categorization, or property-based tests.
+* Added `src/reconcile/reports/income_statement.py`.
+* Added `generate_income_statement(connection, *, start_date, end_date)`.
+* Added `income_statement_totals(rows)`.
+* Added `src/reconcile/reports/balance_sheet.py`.
+* Added `generate_balance_sheet(connection, *, as_of_date)`.
+* Updated `src/reconcile/reports/__init__.py` to export Step 11 and Step 12 report functions.
+* Preserved Step 11 trial balance exports.
+* Implemented inclusive date-range filtering for income statements.
+* Implemented as-of-date filtering for balance sheets using posted journal entries and journal lines.
+* Implemented income statement account sections for revenue and expense accounts.
+* Implemented revenue totals as credits minus debits.
+* Implemented expense totals as debits minus credits.
+* Implemented net income as revenue minus expenses.
+* Implemented balance sheet account sections for asset, liability, and equity accounts.
+* Included inactive asset, liability, and equity accounts in the balance sheet.
+* Excluded revenue and expense accounts from balance sheet account sections.
+* Included current period net income in total equity.
+* Calculated total liabilities and equity as liabilities plus equity including current period net income.
+* Returned `is_balanced` based on total assets equaling total liabilities and equity.
+* Added validation for report date arguments.
+* Rejected string and `datetime.datetime` report dates.
+* Rejected start dates after end dates for income statements.
+* Validated account types read from SQLite.
+* Validated normal balances read from SQLite for balance sheet reporting.
+* Validated journal line sides read from SQLite.
+* Used integer cents only.
+* Did not use pandas.
+* Did not write report files.
+* Did not print from report functions.
+* Did not rebuild projections inside report functions.
+* Added Step 12 report tests to `tests/test_reports.py` while preserving Step 11 trial balance tests.
+* Tested empty income statements and balance sheets.
+* Tested revenue credits, revenue debits, expense debits, and expense credits.
+* Tested income statement net income calculation.
+* Tested income statement date filtering before, on, and after report dates.
+* Tested balance sheet asset, liability, and equity normal-balance behavior.
+* Tested current period net income flowing into equity.
+* Tested as-of-date filtering for same-day and later entries.
+* Tested invalid database account types, normal balances, and journal line sides.
+* Tested that report generation does not append events.
+* Tested that report generation does not mutate account balance projections.
+* Tested that rebuilt projections produce the same Step 12 report results as incremental projections.
+* Fixed ruff import-order, duplicate-import, and line-length issues.
+* Did not add cash flow, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, CSV exports, or property-based tests.
 
-Commands run for Step 11:
+Commands run for Step 12:
 
 ```bash
 python -m pytest
@@ -88,19 +112,18 @@ git status
 Results:
 
 ```text
-python -m pytest        # run locally in the real repository
-python -m ruff check .  # run locally in the real repository
-git status              # expected Step 11 files only
+python -m pytest        # 292 passed
+python -m ruff check .  # All checks passed
+git status              # expected Step 12 files only
 ```
 
 Next planned step:
 
-Step 12 — Add income statement and balance sheet reports.
+Step 13 — Add journal reversal behavior.
 
-Step 12 status: Not started.
+Step 13 status: Not started.
 
 ---
-
 
 ## Project name
 
@@ -3012,94 +3035,33 @@ Status: Complete.
 
 Goal:
 
-* Generate trial balance data from account and balance projections.
+* Generate trial balance data from account balance projections.
 
 Completed work:
 
 * Added `src/reconcile/reports/__init__.py`.
 * Added `src/reconcile/reports/trial_balance.py`.
-* Exported only Step 11 report behavior from the reports package.
 * Added `generate_trial_balance(connection)`.
 * Added `trial_balance_totals(rows)`.
-* Generated trial balance rows from the current projected state only.
-* Read source data from `accounts` and `account_balances`.
-* Used a LEFT JOIN so accounts without balance rows appear with zero totals and zero ending balances.
-* Included inactive accounts because the trial balance is a ledger/reporting view.
-* Returned plain dictionaries.
-* Used integer cents only.
-* Did not format dollars.
-* Did not require pandas.
-* Did not print.
-* Did not write files.
-* Did not replay events.
-* Did not rebuild projections.
-* Did not mutate projections.
-* Returned rows in stable order by account code, then account ID.
-* Included these row fields:
-
-```text
-account_id
-account_code
-account_name
-account_type
-normal_balance
-debit_total_cents
-credit_total_cents
-ending_debit_balance_cents
-ending_credit_balance_cents
-```
-
-* Used debit-normal ending balance presentation:
-
-```text
-positive balance_cents -> ending_debit_balance_cents
-negative balance_cents -> ending_credit_balance_cents
-zero balance_cents     -> both ending balance columns zero
-```
-
-* Used credit-normal ending balance presentation:
-
-```text
-positive balance_cents -> ending_credit_balance_cents
-negative balance_cents -> ending_debit_balance_cents
-zero balance_cents     -> both ending balance columns zero
-```
-
-* Added trial balance totals:
-
-```text
-total_debits_cents
-total_credits_cents
-total_ending_debit_balance_cents
-total_ending_credit_balance_cents
-is_balanced
-```
-
-* Set `is_balanced` based on total ending debit balances equaling total ending credit balances.
-* Raised `ValidationError` for invalid account types in projected account rows.
-* Raised `ValidationError` for invalid normal balances in projected account rows.
-* Raised `ValidationError` for invalid numeric balance projection fields.
-* Added `tests/test_reports.py`.
-* Tested empty database behavior.
-* Tested accounts with no balance rows.
-* Tested asset debit balance presentation.
-* Tested asset credit balance presentation.
-* Tested expense debit balance presentation.
-* Tested liability credit balance presentation.
-* Tested liability debit balance presentation.
-* Tested equity credit balance presentation.
-* Tested revenue credit balance presentation.
-* Tested debit totals and credit totals.
-* Tested sorting by account code.
-* Tested inactive account inclusion.
-* Tested balanced trial balance totals for a valid ledger.
-* Tested `trial_balance_totals`.
-* Tested rebuilt projections produce the same trial balance as incremental projections.
-* Tested invalid normal balance data raises `ValidationError`.
-* Tested invalid account type data raises `ValidationError`.
-* Tested report generation does not append events.
-* Tested report generation does not mutate account balances.
-* Did not add income statement, balance sheet, cash flow, report exports, CLI integration, dashboard, reversals, bank import, reconciliation, categorization, or property-based tests.
+* Generated report rows from the `accounts` table and left-joined `account_balances`.
+* Included accounts with no balance rows as zero-balance rows.
+* Included inactive accounts.
+* Included account ID, account code, account name, account type, and normal balance.
+* Included debit totals and credit totals from projections.
+* Calculated ending debit and ending credit balances from normal-balance-aware `balance_cents` values.
+* Displayed positive debit-normal balances as ending debit balances.
+* Displayed negative debit-normal balances as ending credit balances.
+* Displayed positive credit-normal balances as ending credit balances.
+* Displayed negative credit-normal balances as ending debit balances.
+* Sorted rows by account code and then account ID.
+* Added totals for debit totals, credit totals, ending debit balances, ending credit balances, and `is_balanced`.
+* Validated account types and normal balances read from SQLite.
+* Validated numeric balance fields read from SQLite.
+* Confirmed report generation does not append events.
+* Confirmed report generation does not mutate `account_balances`.
+* Confirmed rebuilt projections produce the same trial balance as incremental projections.
+* Added Step 11 trial balance coverage to `tests/test_reports.py`.
+* Did not add income statement, balance sheet, cash flow, reversals, bank import, reconciliation, categorization, dashboard, full CLI workflow, CSV exports, or property-based tests.
 
 Files created or edited:
 
@@ -3121,24 +3083,26 @@ git status
 Results:
 
 ```text
-python -m pytest        # run locally in the real repository
-python -m ruff check .  # run locally in the real repository
+python -m pytest        # passed
+python -m ruff check .  # All checks passed
 git status              # expected Step 11 files only
 ```
 
 Definition of done:
 
-* `src/reconcile/reports/__init__.py` exists.
 * `src/reconcile/reports/trial_balance.py` exists.
-* `generate_trial_balance(connection)` returns trial balance rows from projections.
-* Accounts with no balances are included with zero values.
-* Debit-normal and credit-normal accounts display ending balances on the correct side.
-* Total ending debit balances equal total ending credit balances for a valid ledger.
-* Trial balance generation reads projections only and does not mutate state.
-* No income statement, balance sheet, cash flow, reversals, bank import, reconciliation, dashboard, full CLI workflow, or exports were added.
-* `tests/test_reports.py` covers empty state, no-balance accounts, all account types, balance-side presentation, totals, sorting, invalid data, rebuild consistency, and no mutation.
-* Existing tests pass locally.
-* Ruff passes locally.
+* `src/reconcile/reports/__init__.py` exports trial balance functions.
+* Trial balance report includes expected account rows and balances.
+* Accounts without balance rows appear with zero values.
+* Trial balance totals are calculated correctly.
+* Valid ledgers balance.
+* Invalid projection/database data raises `ValidationError`.
+* Report generation does not append events.
+* Report generation does not mutate projections.
+* Rebuilt projections produce the same trial balance as incremental projections.
+* No income statement, balance sheet, cash flow, reversals, bank import, reconciliation, dashboard, full CLI workflow, CSV exports, or property-based tests were added.
+* Tests pass.
+* Ruff passes.
 * Project State is updated.
 
 Suggested commit message:
@@ -3151,49 +3115,105 @@ Add trial balance report
 
 ### Step 12 — Add income statement and balance sheet reports
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Generate basic income statement and balance sheet reports.
+* Generate basic income statement and balance sheet report data from existing ledger data.
 
-Expected work:
+Completed work:
 
-* Add income statement report.
-* Add balance sheet report.
-* Support date ranges for income statement.
-* Support as-of date for balance sheet.
-* Include current period net income in balance sheet if not closed.
-* Add example-based tests.
+* Added `src/reconcile/reports/income_statement.py`.
+* Added `generate_income_statement(connection, *, start_date, end_date)`.
+* Added `income_statement_totals(rows)`.
+* Added `src/reconcile/reports/balance_sheet.py`.
+* Added `generate_balance_sheet(connection, *, as_of_date)`.
+* Updated `src/reconcile/reports/__init__.py` to export trial balance, income statement, and balance sheet functions.
+* Preserved Step 11 `generate_trial_balance` and `trial_balance_totals` exports.
+* Generated income statements from posted journal entries, journal lines, and accounts.
+* Filtered income statements by `journal_entries.entry_date` between `start_date` and `end_date`, inclusive.
+* Included only revenue and expense accounts in income statement account sections.
+* Calculated revenue as credit activity minus debit activity.
+* Calculated expenses as debit activity minus credit activity.
+* Calculated net income as total revenue minus total expenses.
+* Returned income statement dates as ISO date strings.
+* Sorted income statement account rows by account code and account ID.
+* Omitted zero-activity income statement accounts.
+* Generated balance sheets from posted journal entries, journal lines, and accounts.
+* Supported `as_of_date` by filtering journal activity through the as-of date.
+* Avoided relying only on cumulative `account_balances` for balance sheet date filtering.
+* Included asset, liability, and equity accounts in balance sheet account sections.
+* Included inactive asset, liability, and equity accounts with zero balances when applicable.
+* Excluded revenue and expense accounts from balance sheet account sections.
+* Calculated asset balances as positive when debit-normal balances are positive.
+* Calculated liability and equity balances as positive when credit-normal balances are positive.
+* Calculated current period net income from revenue and expense activity through `as_of_date`.
+* Included current period net income in total equity.
+* Calculated total liabilities and equity as total liabilities plus total equity.
+* Returned `is_balanced` when assets equal liabilities plus equity.
+* Returned balance sheet date as an ISO date string.
+* Sorted balance sheet account rows by account code and account ID.
+* Validated report date arguments as real `datetime.date` instances.
+* Rejected `datetime.datetime` values for report dates.
+* Rejected income statement start dates after end dates.
+* Validated account types read from the database.
+* Validated normal balances read from the database for balance sheet reporting.
+* Validated journal line sides read from the database.
+* Used integer cents only.
+* Did not format dollars.
+* Did not use pandas.
+* Did not write files.
+* Did not print from report functions.
+* Did not mutate projections.
+* Did not rebuild projections inside report functions.
+* Added income statement tests for empty databases, revenue, expense, net income, date filtering, sorting, invalid dates, invalid database data, no event appends, and no projection mutation.
+* Added balance sheet tests for empty databases, asset/liability/equity balances, current period net income, as-of-date filtering, sorting, inactive accounts, invalid dates, invalid database data, no event appends, and no projection mutation.
+* Added rebuild consistency coverage proving rebuilt projections produce the same Step 12 reports as incremental projections.
+* Fixed test expectation wording for existing validation helper messages.
+* Fixed ruff import-order, duplicate-import, and line-length issues.
+* Did not add cash flow, reversals, closing entries, statement of retained earnings, bank import, reconciliation, categorization, dashboard, full CLI workflow, CSV exports, sample output generation, or property-based tests.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/reports/income_statement.py
 src/reconcile/reports/balance_sheet.py
+src/reconcile/reports/__init__.py
 tests/test_reports.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Cash flow
-* Dashboard
-* Reconciliation
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # 292 passed
+python -m ruff check .  # All checks passed
+git status              # expected Step 12 files only
 ```
 
 Definition of done:
 
-* Income statement totals are correct.
-* Balance sheet balances.
-* Report tests pass.
+* `src/reconcile/reports/income_statement.py` exists.
+* `src/reconcile/reports/balance_sheet.py` exists.
+* `src/reconcile/reports/__init__.py` exports Step 11 and Step 12 report functions.
+* `generate_income_statement` returns correct revenue, expense, and net income data.
+* `generate_balance_sheet` returns correct asset, liability, equity, net income, and balanced totals.
+* Income statement supports inclusive date ranges.
+* Balance sheet supports `as_of_date`.
+* Reports read existing data and do not mutate events or projections.
+* No cash flow, reversals, bank import, reconciliation, dashboard, CLI, CSV export, or property-based tests were added.
+* `tests/test_reports.py` covers trial balance, income statement behavior, balance sheet behavior, date filtering, report totals, invalid data, no mutation, and rebuild consistency.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
