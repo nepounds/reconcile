@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 17 — Add ledger cash movement extraction.
+Current step: Step 18 — Add exact reconciliation matching.
 
-Status: Step 17 complete.
+Status: Step 18 complete.
 
-Approximate project completion: 55% to 57%.
+Approximate project completion: 58% to 60%.
 
 Current summary:
 
@@ -46,6 +46,13 @@ Current summary:
 * Step 17 converts credit lines to Cash into negative bank-comparable movements.
 * Step 17 supports inclusive start and end date filtering for ledger cash movements.
 * Step 17 excludes reversed original entries and reversal entries by default, with an audit-inclusive option.
+* Step 18 added exact reconciliation matching between imported bank transactions and extracted ledger cash movements.
+* Step 18 creates reconciliation run records with completed status and JSON configuration.
+* Step 18 stores reconciliation match records with match type, score, deltas, status, and JSON explanations.
+* Step 18 stores ledger-link rows for exact auto-matches only.
+* Step 18 enforces one-to-one ledger movement use within a reconciliation run.
+* Step 18 leaves unmatched bank transactions clearly marked as unmatched.
+* Step 18 blocks duplicate-flagged bank transactions from unsafe auto-matching.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -63,84 +70,116 @@ Current summary:
 * Duplicate detection returns a computed `duplicate_reason` without adding a new schema column.
 * Duplicate detection supports row-hash, external-ID, and transaction-fingerprint rules.
 * Ledger cash movement extraction returns stable movement IDs, journal entry references, journal line references, cash account metadata, signed integer amounts, and reversal metadata.
+* Exact reconciliation uses exact cent equality and exact date equality only.
+* Exact reconciliation uses bank-sign convention consistently with ledger cash movements.
 * Duplicate detection precedence is row hash, then external ID, then transaction fingerprint.
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
-* Reconciliation matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
+* Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
+* Fuzzy reconciliation scoring, ambiguity scoring rules, split matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
 
-Completed Step 17 files:
+Completed Step 18 files:
 
 ```text
+src/reconcile/reconciliation/models.py
+src/reconcile/reconciliation/explanations.py
+src/reconcile/reconciliation/matcher.py
 src/reconcile/reconciliation/__init__.py
-src/reconcile/reconciliation/cash_movements.py
-tests/test_cash_movements.py
+tests/test_reconciliation_exact.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 17 summary:
+Completed Step 18 summary:
 
-* Added `src/reconcile/reconciliation/__init__.py`.
-* Added `src/reconcile/reconciliation/cash_movements.py`.
-* Added `extract_ledger_cash_movements(connection, *, cash_account_id, start_date=None, end_date=None, include_reversed=False)`.
-* Added `get_cash_account(connection, cash_account_id)`.
-* Exported only Step 17 cash movement helpers from the reconciliation package.
-* Implemented ledger cash movement extraction from posted journal lines touching the selected cash account.
-* Used journal entry header data from `journal_entries`.
-* Used journal line data from `journal_entry_lines`.
-* Used cash account metadata from `accounts`.
-* Returned plain dictionaries rather than models or pandas objects.
-* Used integer cents only.
-* Implemented bank-comparable sign convention.
-* Converted debit lines to the selected Cash account into positive `amount_cents`.
-* Converted credit lines to the selected Cash account into negative `amount_cents`.
-* Ignored non-cash journal lines.
-* Returned deterministic `ledger_cash_movement_id` values based on journal line IDs.
-* Returned journal entry IDs and journal entry line IDs.
-* Returned ISO date strings for `entry_date`.
-* Returned journal entry descriptions and line descriptions.
-* Returned cash account ID, code, and name.
-* Returned source and external reference fields as `None` because those values are not stored in the current journal projection tables.
-* Returned reversal metadata fields in every movement row.
-* Implemented inclusive `start_date` and `end_date` filtering.
-* Validated date arguments as `datetime.date` instances.
-* Rejected `datetime.datetime` values for date filters.
-* Rejected invalid date ranges where `start_date > end_date`.
+* Added `src/reconcile/reconciliation/models.py`.
+* Added lightweight constants for exact and unmatched match types.
+* Added lightweight constants for auto-matched, candidate, and unmatched statuses.
+* Added lightweight constant for completed reconciliation run status.
+* Added `src/reconcile/reconciliation/explanations.py`.
+* Added `build_exact_match_explanation(...)`.
+* Added `build_unmatched_explanation(...)`.
+* Kept explanations as JSON-serializable plain dictionaries.
+* Included bank transaction IDs, ledger cash movement IDs, amount cents, bank dates, and ledger entry dates in explanations where applicable.
+* Added `src/reconcile/reconciliation/matcher.py`.
+* Added `run_exact_reconciliation(connection, *, cash_account_id, statement_start_date, statement_end_date, reconciliation_run_id=None, started_at=None)`.
+* Added `list_reconciliation_matches(connection, reconciliation_run_id)`.
+* Added `get_reconciliation_run(connection, reconciliation_run_id)`.
 * Validated `cash_account_id` as a nonblank string.
-* Validated that the selected cash account exists.
-* Validated that the selected cash account has `account_type='asset'`.
-* Validated that the selected cash account has `normal_balance='debit'`.
-* Allowed inactive asset/debit cash accounts for historical extraction.
-* Excluded original reversed entries by default.
-* Excluded reversal entries by default.
-* Added `include_reversed=True` support to include both original reversed entries and reversal entries for audit review.
-* Marked reversal rows with `is_reversal=True`.
-* Preserved `reversal_of_entry_id` and `reversed_by_entry_id` values in returned rows.
-* Sorted movement rows by `entry_date`, `journal_entry_id`, and `journal_entry_line_id`.
-* Validated stored journal line side values read from the database.
-* Validated stored journal line amount values read from the database.
-* Ensured extraction does not append ledger events.
-* Ensured extraction does not modify accounting projection tables.
-* Ensured extraction does not modify bank transaction tables.
-* Added `tests/test_cash_movements.py`.
-* Tested empty extraction with a valid cash account.
-* Tested debit-to-Cash positive movement behavior.
-* Tested credit-to-Cash negative movement behavior.
-* Tested non-cash lines are ignored.
-* Tested deterministic movement ordering.
-* Tested returned movement metadata and stable IDs.
-* Tested inclusive start and end date filtering.
-* Tested invalid date arguments and invalid date ranges.
-* Tested cash account validation for blank, missing, non-asset, and credit-normal accounts.
-* Tested inactive cash account historical readability.
-* Tested default reversal exclusion behavior.
-* Tested audit-inclusive reversal behavior with `include_reversed=True`.
-* Tested reversal signs and reversal metadata.
-* Tested read-only safety for events, accounting projections, and bank tables.
-* Tested invalid stored side and invalid stored amount handling.
-* Fixed test calls to match the existing `reverse_journal_entry` signature using `reversal_entry_id`.
-* Did not add exact reconciliation matching, fuzzy scoring, split matching, reconciliation runs, reconciliation match records, categorization, dashboard, full CLI workflow, report exports, cash flow, or new accounting features.
+* Validated statement start and end dates as real `datetime.date` values.
+* Rejected `datetime.datetime` values for statement dates.
+* Rejected statement ranges where start date is after end date.
+* Validated provided reconciliation run IDs as nonblank strings.
+* Generated UUID-based reconciliation run IDs when no run ID is provided.
+* Inserted one reconciliation run row for each exact reconciliation run.
+* Stored run status as `completed`.
+* Stored cash account ID and statement dates on reconciliation runs.
+* Stored started and completed timestamps on reconciliation runs.
+* Stored JSON reconciliation configuration in `config_json`.
+* Converted duplicate reconciliation run IDs into `ValidationError`.
+* Selected bank transactions within the statement date range, inclusive.
+* Used existing signed integer bank amounts from `bank_transactions.amount_cents`.
+* Included duplicate-flagged bank transactions in inspection.
+* Blocked duplicate-flagged bank transactions from automatic matching.
+* Used `extract_ledger_cash_movements` for ledger-side selection.
+* Used Step 17 default effective-only behavior for reversed entries.
+* Did not reimplement cash movement extraction inside the matcher.
+* Matched exact candidates only when bank amount equals ledger amount and bank transaction date equals ledger entry date.
+* Used exact cent equality only.
+* Used exact date equality only.
+* Added deterministic matching order by bank transaction date, bank transaction ID, ledger entry date, and ledger movement ID.
+* Enforced that one ledger cash movement can be used by at most one auto-match in the same run.
+* Enforced that one bank transaction receives at most one reconciliation match record in Step 18.
+* Created exact auto-match rows when exactly one unused ledger movement matched a bank transaction.
+* Created unmatched rows when no ledger movement matched.
+* Created candidate rows when multiple exact ledger candidates existed for one bank transaction.
+* Created candidate rows when a matching ledger movement was already consumed by an earlier bank transaction.
+* Created candidate rows when a duplicate-flagged bank transaction had an exact candidate.
+* Stored exact auto-match rows with `match_type='exact'`, `score=100.0`, zero amount delta, zero date delta, and `status='auto_matched'`.
+* Stored unmatched rows with `match_type='unmatched'`, `score=0.0`, bank amount as amount delta, `date_delta_days=NULL`, and `status='unmatched'`.
+* Stored candidate rows with clear explanation JSON describing why no unsafe auto-match was made.
+* Created ledger-link rows for exact auto-matches only.
+* Linked exact auto-matches to matched journal entry IDs, journal entry line IDs, and signed amount cents.
+* Did not create ledger-link rows for unmatched rows.
+* Did not create ledger-link rows for candidate rows.
+* Committed reconciliation writes after successful completion.
+* Rolled back reconciliation writes if a failure occurred during the run.
+* Did not append ledger events.
+* Did not alter accounts.
+* Did not alter journal entries.
+* Did not alter journal entry lines.
+* Did not alter account balances.
+* Did not alter bank transactions.
+* Updated `src/reconcile/reconciliation/__init__.py` to preserve Step 17 exports and add Step 18 public exports.
+* Added `tests/test_reconciliation_exact.py`.
+* Tested reconciliation run creation.
+* Tested provided reconciliation run IDs.
+* Tested generated reconciliation run IDs.
+* Tested duplicate reconciliation run ID validation.
+* Tested ISO date storage.
+* Tested completed run status.
+* Tested JSON run configuration.
+* Tested summary counts.
+* Tested exact deposit matching to debit-to-Cash movements.
+* Tested exact withdrawal matching to credit-from-Cash movements.
+* Tested amount mismatch unmatched behavior.
+* Tested date mismatch unmatched behavior.
+* Tested exact match record type, status, score, amount delta, date delta, and explanation JSON.
+* Tested exact auto-match ledger-link rows.
+* Tested unmatched records, unmatched explanations, and absence of ledger links.
+* Tested one-to-one ledger movement safety.
+* Tested multiple exact ledger candidates are not auto-matched.
+* Tested duplicate-flagged bank transactions are not auto-matched.
+* Tested deterministic matching behavior.
+* Tested statement date range filtering for start date, end date, before range, and after range.
+* Tested ledger movements outside the statement range are ignored.
+* Tested invalid statement dates and invalid statement ranges.
+* Tested reconciliation does not append ledger events.
+* Tested reconciliation does not modify bank transaction rows.
+* Tested reconciliation does not modify accounting projection tables.
+* Tested reconciliation writes only reconciliation tables.
+* Did not add fuzzy scoring, amount tolerance, fuzzy date windows, description similarity, split matching, manual confirmation/rejection, categorization, dashboard, full CLI workflow, CSV exports, cash flow, or new accounting features.
 
-Commands run for Step 17:
+Commands run for Step 18:
 
 ```bash
 python -m pytest
@@ -150,15 +189,15 @@ python -m ruff check .
 Results:
 
 ```text
-python -m pytest        # 429 passed in 66.79s (0:01:06)
+python -m pytest        # 441 passed in 72.82s (0:01:12)
 python -m ruff check .  # All checks passed!
 ```
 
 Next planned step:
 
-Step 18 — Add exact reconciliation matching.
+Step 19 — Add fuzzy reconciliation scoring and ambiguity handling.
 
-Step 18 status: Not started.
+Step 19 status: Not started.
 
 ---
 
@@ -3876,52 +3915,113 @@ Add ledger cash movement extraction
 
 ### Step 18 — Add exact reconciliation matching
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Match bank transactions to ledger cash movements using exact amount/date logic.
 
-Expected work:
+Completed work:
 
-* Add reconciliation models.
-* Add exact matcher.
-* Create reconciliation run records.
-* Store match records.
-* Store link records.
-* Add tests.
+* Added `src/reconcile/reconciliation/models.py`.
+* Added lightweight constants for Step 18 reconciliation run, match type, and match status values.
+* Added `src/reconcile/reconciliation/explanations.py`.
+* Added exact-match and unmatched explanation builders that return JSON-serializable dictionaries.
+* Added `src/reconcile/reconciliation/matcher.py`.
+* Added `run_exact_reconciliation`.
+* Added `list_reconciliation_matches`.
+* Added `get_reconciliation_run`.
+* Created completed reconciliation run records.
+* Stored reconciliation run statement dates as ISO strings.
+* Stored reconciliation run configuration as JSON.
+* Validated cash account IDs, statement dates, date ranges, and optional run IDs.
+* Rejected `datetime.datetime` values for statement dates.
+* Generated UUID-based reconciliation run IDs when omitted.
+* Converted duplicate reconciliation run IDs into `ValidationError`.
+* Selected bank transactions inside the statement date range, inclusive.
+* Selected ledger cash movements by calling Step 17 `extract_ledger_cash_movements`.
+* Used Step 17 default effective-only reversal behavior.
+* Matched bank transactions to ledger cash movements only when amount cents and date matched exactly.
+* Used exact cent equality only.
+* Used exact date equality only.
+* Did not add fuzzy date windows, amount tolerances, description scoring, or split matching.
+* Enforced one-to-one ledger movement use for auto-matches within a run.
+* Created exact auto-match records with `match_type='exact'`, `score=100.0`, zero amount delta, zero date delta, and `status='auto_matched'`.
+* Created unmatched records with `match_type='unmatched'`, `score=0.0`, bank amount as amount delta, null date delta, and `status='unmatched'`.
+* Created candidate records for duplicate-flagged rows and ambiguous exact-candidate situations instead of unsafe auto-matches.
+* Stored JSON explanation objects on every reconciliation match row.
+* Created `reconciliation_match_ledger_links` rows for exact auto-matches only.
+* Linked exact auto-matches to journal entry IDs, journal entry line IDs, and signed amount cents.
+* Did not create ledger-link rows for unmatched or candidate rows.
+* Made matching deterministic through stable ordering.
+* Committed successful reconciliation writes.
+* Rolled back reconciliation writes on failure.
+* Wrote only to reconciliation tables.
+* Did not append ledger events.
+* Did not mutate accounts, journal entries, journal lines, account balances, or bank transactions.
+* Updated `src/reconcile/reconciliation/__init__.py` to preserve Step 17 exports and add Step 18 exports.
+* Added `tests/test_reconciliation_exact.py`.
+* Tested run creation, duplicate run IDs, ISO date storage, completed status, config JSON, and summary counts.
+* Tested exact positive deposit matching.
+* Tested exact negative withdrawal matching.
+* Tested amount mismatch behavior.
+* Tested date mismatch behavior.
+* Tested exact match fields, score, deltas, explanations, and ledger links.
+* Tested unmatched records and absence of ledger links.
+* Tested one-to-one movement safety.
+* Tested multiple exact ledger candidates are not auto-matched.
+* Tested duplicate-flagged bank rows are not auto-matched.
+* Tested deterministic matching.
+* Tested statement date range inclusion and exclusion.
+* Tested invalid date arguments and invalid ranges.
+* Tested read-only safety for events, bank transactions, and accounting projection tables.
+* Did not add fuzzy reconciliation scoring, ambiguity score gap rules, split matching, categorization, dashboard, full CLI workflow, report exports, cash flow, or new accounting features.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/reconciliation/models.py
-src/reconcile/reconciliation/matcher.py
 src/reconcile/reconciliation/explanations.py
+src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/__init__.py
 tests/test_reconciliation_exact.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Fuzzy scoring
-* Split matching
-* Categorization
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
 ```
 
+Results:
+
+```text
+python -m pytest        # 441 passed in 72.82s (0:01:12)
+python -m ruff check .  # All checks passed!
+```
+
 Definition of done:
 
-* Exact same amount/date matches.
-* Exact deposits match cash debits.
-* Exact withdrawals match cash credits.
-* Unmatched items remain unmatched.
-* Tests pass.
+* `src/reconcile/reconciliation/models.py` exists.
+* `src/reconcile/reconciliation/explanations.py` exists.
+* `src/reconcile/reconciliation/matcher.py` exists.
+* `run_exact_reconciliation` exists.
+* Exact same amount/date bank transactions auto-match to ledger cash movements.
+* Deposits match debit-to-cash movements.
+* Withdrawals match credit-from-cash movements.
+* Unmatched bank transactions get unmatched records.
+* Exact auto-matches create ledger-link rows.
+* Ledger movements are not reused across multiple auto-matches in one run.
+* Duplicate-flagged bank transactions are not unsafe auto-matched.
+* Explanations are stored as JSON.
+* Reconciliation writes only reconciliation tables.
+* No fuzzy scoring, split matching, categorization, dashboard, CLI, CSV export, or cash flow work was added.
+* `tests/test_reconciliation_exact.py` covers exact matching, unmatched handling, run records, ledger links, one-to-one safety, date filtering, explanations, and mutation safety.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 

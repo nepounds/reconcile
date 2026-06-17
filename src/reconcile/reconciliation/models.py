@@ -1,0 +1,19 @@
+"""Lightweight constants for reconciliation matching."""
+
+MATCH_TYPE_EXACT = "exact"
+MATCH_TYPE_UNMATCHED = "unmatched"
+
+MATCH_STATUS_AUTO_MATCHED = "auto_matched"
+MATCH_STATUS_CANDIDATE = "candidate"
+MATCH_STATUS_UNMATCHED = "unmatched"
+
+RECONCILIATION_RUN_STATUS_COMPLETED = "completed"
+
+__all__ = [
+    "MATCH_STATUS_AUTO_MATCHED",
+    "MATCH_STATUS_CANDIDATE",
+    "MATCH_STATUS_UNMATCHED",
+    "MATCH_TYPE_EXACT",
+    "MATCH_TYPE_UNMATCHED",
+    "RECONCILIATION_RUN_STATUS_COMPLETED",
+]
