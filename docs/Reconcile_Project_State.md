@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 14 — Add property-based accounting invariant tests.
+Current step: Step 15 — Add bank CSV import and normalization.
 
-Status: Step 14 complete.
+Status: Step 15 complete.
 
-Approximate project completion: 46% to 48%.
+Approximate project completion: 49% to 51%.
 
 Current summary:
 
@@ -37,6 +37,7 @@ Current summary:
 * Step 12 added income statement and balance sheet reports from posted journal entries and lines.
 * Step 13 added journal reversal behavior through immutable `JournalEntryReversed` events.
 * Step 14 added property-based accounting invariant tests with Hypothesis.
+* Step 15 added bank statement CSV import and deterministic bank description normalization.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -49,86 +50,75 @@ Current summary:
 * Journal reversals mark the original posted entry with `reversed_by_entry_id` and mark the reversal entry with `reversal_of_entry_id`.
 * Projection rebuilds replay `JournalEntryReversed` events and restore reversal state and balances.
 * Property tests generate many valid accounting scenarios and verify core accounting laws still hold.
+* Bank statement imports preserve raw descriptions, store normalized descriptions, convert signed bank amounts to integer cents, and write import metadata plus bank transaction rows.
+* Bank import row hashes are deterministic and duplicate group IDs remain unset for now.
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
-* Cash flow, bank import, reconciliation, categorization, dashboard, full CLI workflow, and CSV exports are still intentionally not implemented.
+* Cash flow, bank duplicate detection, reconciliation, categorization, dashboard, full CLI workflow, and CSV exports are still intentionally not implemented.
 
-Completed Step 14 files:
+Completed Step 15 files:
 
 ```text
-pyproject.toml
-docs/Accounting_Invariants.md
+src/reconcile/imports/__init__.py
+src/reconcile/imports/bank_csv.py
+src/reconcile/imports/normalization.py
+tests/test_bank_import.py
 docs/Reconcile_Project_State.md
-tests/property/conftest.py
-tests/property/test_accounting_invariants.py
-tests/property/test_replay_invariants.py
-tests/property/test_reversal_invariants.py
-tests/test_projection_rebuild.py
 ```
 
-Completed Step 14 summary:
+Completed Step 15 summary:
 
-* Added Hypothesis to the project development dependencies.
-* Added and updated `docs/Accounting_Invariants.md`.
-* Added `tests/property/` property-test suite.
-* Added shared property-test helpers in `tests/property/conftest.py`.
-* Added generated account definitions for asset, liability, equity, revenue, and expense accounts.
-* Added Hypothesis strategies for valid two-line postings.
-* Added Hypothesis strategies for generated posting sequences.
-* Added generated valid journal entry helpers.
-* Added generated intentionally unbalanced journal entry helpers.
-* Added fresh SQLite database creation per Hypothesis example to avoid fixture reuse pollution.
-* Added property tests proving generated balanced journal entries validate.
-* Added property tests proving generated unbalanced journal entries raise `ValidationError`.
-* Added property tests proving posted generated entries keep the trial balance balanced.
-* Added property tests proving valid posting sequences keep the trial balance balanced.
-* Added property tests proving invalid generated entries do not enter the event store.
-* Added property tests proving the expanded accounting equation holds before closing entries.
-* Added property tests proving projection rebuilds restore the same account balances.
-* Added property tests proving projection rebuilds restore the same trial balance.
-* Added property tests proving rebuilds do not change event count.
-* Added property tests proving rebuilds do not change event IDs.
-* Added property tests proving rebuilds do not change event sequences.
-* Added property tests proving running rebuild twice is deterministic.
-* Added property tests proving event replay is deterministic when ordered by `event_sequence`.
-* Added property tests proving reversing generated entries removes net account balance impact.
-* Added property tests proving reversals preserve activity totals by adding opposite-side activity.
-* Added property tests proving reversals keep the trial balance balanced.
-* Added property tests proving rebuild after reversals restores incremental balances.
-* Added property tests proving reversing valid generated entries creates linked reversal entries.
-* Added property tests proving original journal entries are preserved after reversal.
-* Added property tests proving generated reversal entries point back to the original entry.
-* Added property tests proving reversing the same generated entry twice raises `ValidationError`.
-* Updated `tests/test_projection_rebuild.py` so the unsupported future event example uses `BankStatementImported`, because `JournalEntryReversed` is now supported after Step 13.
-* Fixed Hypothesis decorator keyword usage for generated examples.
-* Fixed Hypothesis function-scoped fixture health checks.
-* Fixed property helper database reuse by creating a fresh database file per generated example.
-* Fixed property tests to call `post_journal_entry(connection, journal_entry)` using the real service signature.
-* Fixed ruff import ordering in property tests.
-* Did not add bank import, duplicate detection, reconciliation, categorization, dashboard, full CLI workflow, cash flow, or CSV exports.
+* Added the `reconcile.imports` package for Step 15 import helpers.
+* Added deterministic bank description normalization.
+* Added validation that bank descriptions must be strings and cannot be blank.
+* Added normalization that strips surrounding whitespace, collapses repeated internal whitespace, uppercases text, and removes noisy punctuation while preserving alphanumeric meaning.
+* Added bank CSV reading with the standard-library `csv` module.
+* Added required-column validation for `transaction_date`, `description`, and `amount`.
+* Added support for optional `posted_date`, `external_id`, and `check_number` columns.
+* Added missing-file, empty-file, header-only, blank-field, invalid-date, invalid-posted-date, and invalid-amount validation.
+* Added ISO `YYYY-MM-DD` transaction date parsing.
+* Added optional ISO posted date parsing.
+* Added bank amount parsing through existing integer-cents money helpers.
+* Preserved bank sign convention: deposits/inflows are positive cents and withdrawals/outflows are negative cents.
+* Added deterministic SHA-256 row hashing using stable bank row fields.
+* Added bank statement import metadata writes to `bank_statement_imports`.
+* Added bank transaction row writes to `bank_transactions`.
+* Stored raw descriptions in `description_raw`.
+* Stored normalized descriptions in `description_normalized`.
+* Stored signed integer cents in `amount_cents`.
+* Stored optional external IDs and check numbers when present, and `NULL` when missing or blank.
+* Stored optional posted dates when present, and `NULL` when missing or blank.
+* Stored `duplicate_group_id` as `NULL` because duplicate detection is intentionally not implemented yet.
+* Added import ID validation and UUID-based generated import IDs.
+* Added UUID-based generated bank transaction IDs.
+* Added duplicate import ID validation with `ValidationError`.
+* Added transaction commit behavior for successful imports.
+* Added tests proving failed duplicate imports do not leave extra partial rows.
+* Added tests proving bank import does not append ledger events.
+* Added tests proving bank import does not modify accounting projection tables.
+* Kept the existing sample `examples/demo_company/bank_statement.csv` unchanged because it already satisfied Step 15 requirements.
+* Did not add bank duplicate detection, reconciliation matching, ledger cash movement extraction, fuzzy matching, split matching, categorization, dashboard, full CLI workflow, CSV exports, cash flow, or new accounting features.
 
-Commands run for Step 14:
+Commands run for Step 15:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m ruff check .
 python -m pytest
+python -m ruff check .
 git status
 ```
 
 Results:
 
 ```text
-python -m pip install -e ".[dev]"  # success; Hypothesis installed
-python -m ruff check .             # All checks passed!
-python -m pytest                   # 335 passed in 71.13s (0:01:11)
-git status                         # expected Step 14 files plus Step 13/14 projection rebuild cleanup
+python -m pytest        # 378 passed in 72.60s (0:01:12)
+python -m ruff check .  # All checks passed!
+git status              # untracked src/reconcile/imports/ and tests/test_bank_import.py; no bank_statement.csv change
 ```
 
 Next planned step:
 
-Step 15 — Add bank CSV import and normalization.
+Step 16 — Add bank duplicate detection.
 
-Step 15 status: Not started.
+Step 16 status: Not started.
 
 ---
 
@@ -3450,55 +3440,158 @@ Add property-based accounting invariant tests
 
 ### Step 15 — Add bank CSV import and normalization
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Import fake bank statement CSV data and normalize descriptions.
+* Import fake bank statement CSV data into SQLite and normalize descriptions.
 
-Expected work:
+Completed work:
 
-* Add bank CSV importer.
-* Validate required columns.
-* Preserve raw descriptions.
-* Normalize descriptions.
-* Convert bank amounts to integer cents.
-* Store import metadata.
-* Store bank transactions.
-* Add tests.
+* Added `src/reconcile/imports/__init__.py`.
+* Added `src/reconcile/imports/normalization.py`.
+* Added `src/reconcile/imports/bank_csv.py`.
+* Added `tests/test_bank_import.py`.
+* Exported only Step 15 bank import and normalization functions from `reconcile.imports`.
+* Added `normalize_bank_description(description: str) -> str`.
+* Validated that bank descriptions are strings.
+* Rejected blank bank descriptions with `ValidationError`.
+* Normalized bank descriptions by stripping whitespace, collapsing repeated whitespace, uppercasing text, and replacing noisy punctuation with spaces.
+* Preserved meaningful alphanumeric description text.
+* Kept description normalization deterministic.
+* Added `read_bank_statement_csv(csv_path)`.
+* Added `hash_bank_row(row)`.
+* Added `import_bank_statement_csv(connection, csv_path, *, source_name="bank_csv", import_id=None)`.
+* Used the standard-library `csv` module for CSV reading.
+* Required `transaction_date`, `description`, and `amount` columns.
+* Supported optional `posted_date`, `external_id`, and `check_number` columns.
+* Rejected missing files with `ValidationError`.
+* Rejected empty CSV files.
+* Rejected header-only CSV files.
+* Rejected blank transaction dates.
+* Rejected blank descriptions.
+* Rejected blank amounts.
+* Parsed transaction dates as ISO `YYYY-MM-DD`.
+* Parsed nonblank posted dates as ISO `YYYY-MM-DD`.
+* Stored missing or blank posted dates as `NULL`.
+* Converted bank amount strings to integer cents using existing money helpers.
+* Preserved bank sign convention for deposits and withdrawals.
+* Wrote one row per import to `bank_statement_imports`.
+* Wrote one row per CSV data row to `bank_transactions`.
+* Returned the import ID from successful imports.
+* Stored `source_name`, `file_name`, `file_hash`, `imported_at`, and `row_count` on import metadata rows.
+* Preserved raw bank descriptions in `description_raw`.
+* Stored normalized bank descriptions in `description_normalized`.
+* Stored parsed dates as ISO strings.
+* Stored signed integer cents in `amount_cents`.
+* Stored optional external IDs and check numbers when present.
+* Stored `NULL` for missing or blank optional values.
+* Stored deterministic SHA-256 row hashes.
+* Left `duplicate_group_id` as `NULL` for all imported rows.
+* Generated import IDs with a `bank-import-` prefix when no import ID is provided.
+* Generated bank transaction IDs with a `bank-txn-` prefix.
+* Validated provided import IDs are not blank.
+* Validated duplicate import IDs before insert and raised `ValidationError`.
+* Committed successful imports.
+* Preserved transaction atomicity for duplicate-import failures.
+* Confirmed bank import does not append ledger events.
+* Confirmed bank import does not mutate accounting projection tables.
+* Kept the existing sample bank statement CSV unchanged because it already satisfied Step 15 requirements.
+* Did not implement `BankStatementImported` events or handlers.
+* Did not change projection rebuild behavior for bank imports.
+* Did not implement bank duplicate detection, reconciliation matching, ledger cash movement extraction, fuzzy matching, split matching, categorization, dashboard, full CLI workflow, CSV exports, or cash flow.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/imports/__init__.py
 src/reconcile/imports/bank_csv.py
 src/reconcile/imports/normalization.py
 tests/test_bank_import.py
-examples/demo_company/bank_statement.csv
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
+Tests added:
 
-* Reconciliation matching
-* Categorization
-* Dashboard
+* Normalization strips whitespace.
+* Normalization collapses repeated whitespace.
+* Normalization uppercases text.
+* Normalization handles punctuation deterministically.
+* Blank descriptions raise `ValidationError`.
+* Non-string descriptions raise `ValidationError`.
+* Valid CSV rows are read.
+* Missing required columns raise `ValidationError`.
+* Missing files raise `ValidationError`.
+* Empty CSV files raise `ValidationError`.
+* Header-only CSV files raise `ValidationError`.
+* Blank transaction dates raise `ValidationError`.
+* Blank descriptions raise `ValidationError`.
+* Blank amounts raise `ValidationError`.
+* Invalid transaction dates raise `ValidationError`.
+* Invalid posted dates raise `ValidationError`.
+* Invalid amounts raise `ValidationError`.
+* Import inserts one `bank_statement_imports` row.
+* Import inserts one `bank_transactions` row per CSV row.
+* Returned import IDs match stored import IDs.
+* Provided import IDs are used.
+* Generated import IDs are nonblank.
+* Duplicate import IDs raise `ValidationError`.
+* Import row counts match imported transaction row counts.
+* Positive amounts store positive cents.
+* Negative amounts store negative cents.
+* Raw descriptions are preserved.
+* Normalized descriptions are stored.
+* Optional posted dates are stored when present.
+* Optional posted dates are `NULL` when missing or blank.
+* Optional external IDs are stored when present.
+* Optional external IDs are `NULL` when missing or blank.
+* Optional check numbers are stored when present.
+* Optional check numbers are `NULL` when missing or blank.
+* Row hashes are populated.
+* Same rows produce the same row hash.
+* Different rows usually produce different row hashes.
+* Duplicate group IDs are `NULL`.
+* Import commits rows.
+* Failed duplicate imports do not leave extra partial rows.
+* Bank import does not append ledger events.
+* Bank import does not modify accounting projection tables.
 
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # 378 passed in 72.60s (0:01:12)
+python -m ruff check .  # All checks passed!
+git status              # untracked src/reconcile/imports/ and tests/test_bank_import.py
 ```
 
 Definition of done:
 
-* Valid bank CSV imports.
-* Missing required columns fail clearly.
+* `src/reconcile/imports/__init__.py` exists.
+* `src/reconcile/imports/normalization.py` exists.
+* `src/reconcile/imports/bank_csv.py` exists.
+* Valid bank CSV files import into SQLite.
+* Required columns are validated.
 * Raw descriptions are preserved.
-* Normalized descriptions are stored.
-* Tests pass.
+* Descriptions are normalized deterministically.
+* Bank amounts are stored as signed integer cents.
+* Import metadata is stored in `bank_statement_imports`.
+* Transaction rows are stored in `bank_transactions`.
+* Row hashes are deterministic.
+* Duplicate group IDs remain unset for now.
+* No bank duplicate grouping, reconciliation, categorization, dashboard, CLI, export, or cash flow work was added.
+* No ledger events are appended by bank import in this step.
+* `tests/test_bank_import.py` covers normalization, CSV validation, database writes, row hashing, optional fields, and no accounting-state mutation.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
