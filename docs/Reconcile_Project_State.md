@@ -10,17 +10,17 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 15 — Add bank CSV import and normalization.
+Current step: Step 16 — Add bank duplicate detection.
 
-Status: Step 15 complete.
+Status: Step 16 complete.
 
-Approximate project completion: 49% to 51%.
+Approximate project completion: 52% to 54%.
 
 Current summary:
 
 * Reconcile has its initial Python package skeleton under `src/reconcile/`.
 * `pyproject.toml` is the dependency source of truth.
-* Development tooling now includes pytest, ruff, and Hypothesis.
+* Development tooling includes pytest, ruff, and Hypothesis.
 * The package import smoke test passed in Step 1.
 * Fake demo input CSV files exist for the chart of accounts, journal entries, and bank statement.
 * Step 2 added the custom exception hierarchy and integer-cents money helpers.
@@ -37,7 +37,10 @@ Current summary:
 * Step 12 added income statement and balance sheet reports from posted journal entries and lines.
 * Step 13 added journal reversal behavior through immutable `JournalEntryReversed` events.
 * Step 14 added property-based accounting invariant tests with Hypothesis.
-* Step 15 added bank statement CSV import and deterministic bank description normalization.
+* Step 15 added bank statement CSV import and bank description normalization.
+* Step 15 added raw bank description preservation, normalized descriptions, signed integer bank amounts, deterministic row hashes, and bank import metadata.
+* Step 16 added bank duplicate detection and duplicate marking for imported bank transactions.
+* Step 16 integrated duplicate marking into bank CSV import so duplicates are flagged immediately after import.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -50,75 +53,90 @@ Current summary:
 * Journal reversals mark the original posted entry with `reversed_by_entry_id` and mark the reversal entry with `reversal_of_entry_id`.
 * Projection rebuilds replay `JournalEntryReversed` events and restore reversal state and balances.
 * Property tests generate many valid accounting scenarios and verify core accounting laws still hold.
-* Bank statement imports preserve raw descriptions, store normalized descriptions, convert signed bank amounts to integer cents, and write import metadata plus bank transaction rows.
-* Bank import row hashes are deterministic and duplicate group IDs remain unset for now.
+* Bank imports preserve source rows instead of deleting or merging anything.
+* Duplicate imported bank rows are flagged with deterministic `duplicate_group_id` values.
+* Duplicate detection returns a computed `duplicate_reason` without adding a new schema column.
+* Duplicate detection supports row-hash, external-ID, and transaction-fingerprint rules.
+* Duplicate detection precedence is row hash, then external ID, then transaction fingerprint.
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
-* Cash flow, bank duplicate detection, reconciliation, categorization, dashboard, full CLI workflow, and CSV exports are still intentionally not implemented.
+* Ledger cash movement extraction, reconciliation matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
 
-Completed Step 15 files:
+Completed Step 16 files:
 
 ```text
-src/reconcile/imports/__init__.py
+src/reconcile/imports/duplicate_detection.py
 src/reconcile/imports/bank_csv.py
-src/reconcile/imports/normalization.py
-tests/test_bank_import.py
+src/reconcile/imports/__init__.py
+tests/test_bank_duplicate_detection.py
 docs/Reconcile_Project_State.md
 ```
 
-Completed Step 15 summary:
+Completed Step 16 summary:
 
-* Added the `reconcile.imports` package for Step 15 import helpers.
-* Added deterministic bank description normalization.
-* Added validation that bank descriptions must be strings and cannot be blank.
-* Added normalization that strips surrounding whitespace, collapses repeated internal whitespace, uppercases text, and removes noisy punctuation while preserving alphanumeric meaning.
-* Added bank CSV reading with the standard-library `csv` module.
-* Added required-column validation for `transaction_date`, `description`, and `amount`.
-* Added support for optional `posted_date`, `external_id`, and `check_number` columns.
-* Added missing-file, empty-file, header-only, blank-field, invalid-date, invalid-posted-date, and invalid-amount validation.
-* Added ISO `YYYY-MM-DD` transaction date parsing.
-* Added optional ISO posted date parsing.
-* Added bank amount parsing through existing integer-cents money helpers.
-* Preserved bank sign convention: deposits/inflows are positive cents and withdrawals/outflows are negative cents.
-* Added deterministic SHA-256 row hashing using stable bank row fields.
-* Added bank statement import metadata writes to `bank_statement_imports`.
-* Added bank transaction row writes to `bank_transactions`.
-* Stored raw descriptions in `description_raw`.
-* Stored normalized descriptions in `description_normalized`.
-* Stored signed integer cents in `amount_cents`.
-* Stored optional external IDs and check numbers when present, and `NULL` when missing or blank.
-* Stored optional posted dates when present, and `NULL` when missing or blank.
-* Stored `duplicate_group_id` as `NULL` because duplicate detection is intentionally not implemented yet.
-* Added import ID validation and UUID-based generated import IDs.
-* Added UUID-based generated bank transaction IDs.
-* Added duplicate import ID validation with `ValidationError`.
-* Added transaction commit behavior for successful imports.
-* Added tests proving failed duplicate imports do not leave extra partial rows.
-* Added tests proving bank import does not append ledger events.
-* Added tests proving bank import does not modify accounting projection tables.
-* Kept the existing sample `examples/demo_company/bank_statement.csv` unchanged because it already satisfied Step 15 requirements.
-* Did not add bank duplicate detection, reconciliation matching, ledger cash movement extraction, fuzzy matching, split matching, categorization, dashboard, full CLI workflow, CSV exports, cash flow, or new accounting features.
+* Added `src/reconcile/imports/duplicate_detection.py`.
+* Added `build_duplicate_group_id(reason, key)`.
+* Added `detect_duplicate_bank_transactions(connection, import_id=None)`.
+* Added `mark_duplicate_bank_transactions(connection, import_id=None)`.
+* Implemented non-mutating duplicate detection.
+* Implemented duplicate marking that clears and recalculates `duplicate_group_id` values for the selected scope.
+* Supported scoped duplicate detection by `import_id`.
+* Supported global duplicate detection when `import_id` is omitted.
+* Added validation that blank `import_id` arguments raise `ValidationError`.
+* Implemented Rule A duplicate detection by duplicate `row_hash`.
+* Implemented Rule B duplicate detection by duplicate nonblank `external_id`.
+* Implemented Rule C duplicate detection by duplicate transaction fingerprint.
+* Defined transaction fingerprint as `transaction_date`, `amount_cents`, and `description_normalized`.
+* Implemented duplicate precedence so row hash wins over external ID and fingerprint.
+* Implemented duplicate precedence so external ID wins over fingerprint when row hash does not apply.
+* Ensured each duplicate bank transaction receives at most one duplicate group ID.
+* Used deterministic SHA-256 hashing for duplicate group IDs.
+* Avoided Python's built-in `hash()`.
+* Returned duplicate rows with `duplicate_group_id` and computed `duplicate_reason`.
+* Returned duplicate rows in deterministic order by duplicate group, transaction date, and transaction ID.
+* Updated bank CSV import to call duplicate marking after a successful import.
+* Kept `import_bank_statement_csv` returning only the import ID.
+* Kept bank imports preserving raw descriptions, normalized descriptions, dates, amounts, external IDs, check numbers, row hashes, and source rows.
+* Updated import package exports to include duplicate detection functions.
+* Added `tests/test_bank_duplicate_detection.py`.
+* Tested row-hash duplicate groups.
+* Tested external-ID duplicate groups.
+* Tested blank and `NULL` external IDs are ignored.
+* Tested transaction-fingerprint duplicate groups.
+* Tested near-fingerprint rows are not grouped.
+* Tested duplicate-rule precedence.
+* Tested detection versus marking behavior.
+* Tested idempotent marking.
+* Tested recalculation after adding another duplicate.
+* Tested import integration.
+* Tested scoped versus global duplicate detection.
+* Tested duplicate detection across multiple imports.
+* Tested empty-bank-transaction behavior.
+* Tested invalid blank `import_id` handling.
+* Tested duplicate detection does not append ledger events.
+* Tested duplicate detection does not modify accounting projection tables.
+* Fixed accidental `src/reconcile/imports/_init_.py` filename issue so the real package initializer is `src/reconcile/imports/__init__.py`.
+* Fixed ruff import ordering.
+* Did not add ledger cash movement extraction, reconciliation matching, fuzzy scoring, split matching, categorization, dashboard, full CLI workflow, report exports, cash flow, or bank import events.
 
-Commands run for Step 15:
+Commands run for Step 16:
 
 ```bash
 python -m pytest
 python -m ruff check .
-git status
 ```
 
 Results:
 
 ```text
-python -m pytest        # 378 passed in 72.60s (0:01:12)
+python -m pytest        # 403 passed in 64.67s (0:01:04)
 python -m ruff check .  # All checks passed!
-git status              # untracked src/reconcile/imports/ and tests/test_bank_import.py; no bank_statement.csv change
 ```
 
 Next planned step:
 
-Step 16 — Add bank duplicate detection.
+Step 17 — Add ledger cash movement extraction.
 
-Step 16 status: Not started.
+Step 17 status: Not started.
 
 ---
 
@@ -3444,62 +3462,61 @@ Status: Complete.
 
 Goal:
 
-* Import fake bank statement CSV data into SQLite and normalize descriptions.
+* Import fake bank statement CSV data and normalize descriptions.
 
 Completed work:
 
 * Added `src/reconcile/imports/__init__.py`.
-* Added `src/reconcile/imports/normalization.py`.
 * Added `src/reconcile/imports/bank_csv.py`.
+* Added `src/reconcile/imports/normalization.py`.
 * Added `tests/test_bank_import.py`.
-* Exported only Step 15 bank import and normalization functions from `reconcile.imports`.
-* Added `normalize_bank_description(description: str) -> str`.
-* Validated that bank descriptions are strings.
-* Rejected blank bank descriptions with `ValidationError`.
-* Normalized bank descriptions by stripping whitespace, collapsing repeated whitespace, uppercasing text, and replacing noisy punctuation with spaces.
-* Preserved meaningful alphanumeric description text.
-* Kept description normalization deterministic.
-* Added `read_bank_statement_csv(csv_path)`.
-* Added `hash_bank_row(row)`.
-* Added `import_bank_statement_csv(connection, csv_path, *, source_name="bank_csv", import_id=None)`.
-* Used the standard-library `csv` module for CSV reading.
-* Required `transaction_date`, `description`, and `amount` columns.
-* Supported optional `posted_date`, `external_id`, and `check_number` columns.
-* Rejected missing files with `ValidationError`.
-* Rejected empty CSV files.
-* Rejected header-only CSV files.
-* Rejected blank transaction dates.
-* Rejected blank descriptions.
-* Rejected blank amounts.
-* Parsed transaction dates as ISO `YYYY-MM-DD`.
-* Parsed nonblank posted dates as ISO `YYYY-MM-DD`.
-* Stored missing or blank posted dates as `NULL`.
-* Converted bank amount strings to integer cents using existing money helpers.
-* Preserved bank sign convention for deposits and withdrawals.
-* Wrote one row per import to `bank_statement_imports`.
-* Wrote one row per CSV data row to `bank_transactions`.
-* Returned the import ID from successful imports.
-* Stored `source_name`, `file_name`, `file_hash`, `imported_at`, and `row_count` on import metadata rows.
+* Implemented `read_bank_statement_csv`.
+* Implemented `hash_bank_row`.
+* Implemented `import_bank_statement_csv`.
+* Implemented deterministic bank description normalization.
+* Validated required bank CSV columns:
+
+```text
+transaction_date
+description
+amount
+```
+
+* Supported optional bank CSV columns:
+
+```text
+posted_date
+external_id
+check_number
+```
+
 * Preserved raw bank descriptions in `description_raw`.
-* Stored normalized bank descriptions in `description_normalized`.
-* Stored parsed dates as ISO strings.
-* Stored signed integer cents in `amount_cents`.
-* Stored optional external IDs and check numbers when present.
-* Stored `NULL` for missing or blank optional values.
-* Stored deterministic SHA-256 row hashes.
-* Left `duplicate_group_id` as `NULL` for all imported rows.
-* Generated import IDs with a `bank-import-` prefix when no import ID is provided.
-* Generated bank transaction IDs with a `bank-txn-` prefix.
-* Validated provided import IDs are not blank.
-* Validated duplicate import IDs before insert and raised `ValidationError`.
-* Committed successful imports.
-* Preserved transaction atomicity for duplicate-import failures.
-* Confirmed bank import does not append ledger events.
-* Confirmed bank import does not mutate accounting projection tables.
-* Kept the existing sample bank statement CSV unchanged because it already satisfied Step 15 requirements.
-* Did not implement `BankStatementImported` events or handlers.
-* Did not change projection rebuild behavior for bank imports.
-* Did not implement bank duplicate detection, reconciliation matching, ledger cash movement extraction, fuzzy matching, split matching, categorization, dashboard, full CLI workflow, CSV exports, or cash flow.
+* Stored normalized descriptions in `description_normalized`.
+* Converted bank amount strings to signed integer cents using bank-sign convention.
+* Preserved deposits as positive amounts.
+* Preserved withdrawals as negative amounts.
+* Stored import metadata in `bank_statement_imports`.
+* Stored imported rows in `bank_transactions`.
+* Stored deterministic row hashes for imported rows.
+* Left `duplicate_group_id` unset in Step 15.
+* Validated missing files.
+* Validated empty CSV files.
+* Validated missing required columns.
+* Validated blank descriptions.
+* Validated blank amounts.
+* Validated invalid dates.
+* Validated invalid money values.
+* Validated duplicate import IDs.
+* Added tests for raw-description preservation.
+* Added tests for normalized-description storage.
+* Added tests for signed integer cent storage.
+* Added tests for deterministic row hashes.
+* Added tests for import metadata.
+* Added tests for optional fields.
+* Added tests for invalid CSV inputs.
+* Added tests confirming bank imports do not append ledger events.
+* Added tests confirming bank imports do not mutate accounting projection tables.
+* Did not implement duplicate detection, ledger cash movement extraction, reconciliation matching, categorization, dashboard, full CLI workflow, CSV exports, or cash flow.
 
 Files created or edited:
 
@@ -3508,53 +3525,9 @@ src/reconcile/imports/__init__.py
 src/reconcile/imports/bank_csv.py
 src/reconcile/imports/normalization.py
 tests/test_bank_import.py
+examples/demo_company/bank_statement.csv
 docs/Reconcile_Project_State.md
 ```
-
-Tests added:
-
-* Normalization strips whitespace.
-* Normalization collapses repeated whitespace.
-* Normalization uppercases text.
-* Normalization handles punctuation deterministically.
-* Blank descriptions raise `ValidationError`.
-* Non-string descriptions raise `ValidationError`.
-* Valid CSV rows are read.
-* Missing required columns raise `ValidationError`.
-* Missing files raise `ValidationError`.
-* Empty CSV files raise `ValidationError`.
-* Header-only CSV files raise `ValidationError`.
-* Blank transaction dates raise `ValidationError`.
-* Blank descriptions raise `ValidationError`.
-* Blank amounts raise `ValidationError`.
-* Invalid transaction dates raise `ValidationError`.
-* Invalid posted dates raise `ValidationError`.
-* Invalid amounts raise `ValidationError`.
-* Import inserts one `bank_statement_imports` row.
-* Import inserts one `bank_transactions` row per CSV row.
-* Returned import IDs match stored import IDs.
-* Provided import IDs are used.
-* Generated import IDs are nonblank.
-* Duplicate import IDs raise `ValidationError`.
-* Import row counts match imported transaction row counts.
-* Positive amounts store positive cents.
-* Negative amounts store negative cents.
-* Raw descriptions are preserved.
-* Normalized descriptions are stored.
-* Optional posted dates are stored when present.
-* Optional posted dates are `NULL` when missing or blank.
-* Optional external IDs are stored when present.
-* Optional external IDs are `NULL` when missing or blank.
-* Optional check numbers are stored when present.
-* Optional check numbers are `NULL` when missing or blank.
-* Row hashes are populated.
-* Same rows produce the same row hash.
-* Different rows usually produce different row hashes.
-* Duplicate group IDs are `NULL`.
-* Import commits rows.
-* Failed duplicate imports do not leave extra partial rows.
-* Bank import does not append ledger events.
-* Bank import does not modify accounting projection tables.
 
 Commands run:
 
@@ -3567,28 +3540,23 @@ git status
 Results:
 
 ```text
-python -m pytest        # 378 passed in 72.60s (0:01:12)
+python -m pytest        # 378 passed
 python -m ruff check .  # All checks passed!
-git status              # untracked src/reconcile/imports/ and tests/test_bank_import.py
+git status              # expected Step 15 files only
 ```
 
 Definition of done:
 
-* `src/reconcile/imports/__init__.py` exists.
-* `src/reconcile/imports/normalization.py` exists.
-* `src/reconcile/imports/bank_csv.py` exists.
-* Valid bank CSV files import into SQLite.
+* Valid bank CSV files import successfully.
 * Required columns are validated.
 * Raw descriptions are preserved.
-* Descriptions are normalized deterministically.
+* Normalized descriptions are stored.
 * Bank amounts are stored as signed integer cents.
-* Import metadata is stored in `bank_statement_imports`.
-* Transaction rows are stored in `bank_transactions`.
 * Row hashes are deterministic.
-* Duplicate group IDs remain unset for now.
-* No bank duplicate grouping, reconciliation, categorization, dashboard, CLI, export, or cash flow work was added.
-* No ledger events are appended by bank import in this step.
-* `tests/test_bank_import.py` covers normalization, CSV validation, database writes, row hashing, optional fields, and no accounting-state mutation.
+* Import metadata is stored.
+* Duplicate group IDs remain unset until Step 16.
+* No duplicate detection, reconciliation, categorization, dashboard, full CLI workflow, CSV export, or cash flow behavior was added.
+* `tests/test_bank_import.py` covers import behavior, validation errors, normalization, row hashing, and no accounting-state mutation.
 * Existing tests pass.
 * Ruff passes.
 * Project State is updated.
@@ -3603,50 +3571,132 @@ Add bank CSV import and normalization
 
 ### Step 16 — Add bank duplicate detection
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Detect duplicate bank import rows without deleting source data.
 
-Expected work:
+Completed work:
 
-* Add row hashing.
-* Detect duplicate external IDs if available.
-* Detect duplicate date/amount/description groups.
-* Store duplicate group IDs.
-* Add duplicate reason/explanation if useful.
-* Add tests.
+* Added `src/reconcile/imports/duplicate_detection.py`.
+* Added `build_duplicate_group_id(reason, key)`.
+* Added `detect_duplicate_bank_transactions(connection, import_id=None)`.
+* Added `mark_duplicate_bank_transactions(connection, import_id=None)`.
+* Implemented duplicate detection over `bank_transactions`.
+* Supported scoped duplicate detection when `import_id` is provided.
+* Supported global duplicate detection when `import_id` is omitted.
+* Validated blank `import_id` arguments and raised `ValidationError`.
+* Implemented duplicate Rule A for duplicate `row_hash` values.
+* Implemented duplicate Rule B for duplicate nonblank `external_id` values.
+* Ignored blank external IDs.
+* Ignored `NULL` external IDs.
+* Implemented duplicate Rule C for transaction fingerprints.
+* Defined transaction fingerprints as:
 
-Allowed files to create/edit:
+```text
+transaction_date
+amount_cents
+description_normalized
+```
+
+* Implemented rule precedence:
+
+```text
+row_hash
+external_id
+fingerprint
+```
+
+* Ensured a row receives at most one `duplicate_group_id`.
+* Used deterministic SHA-256 hashing to create group IDs.
+* Used recognizable group ID prefixes:
+
+```text
+dup-row-hash-
+dup-external-id-
+dup-fingerprint-
+```
+
+* Kept duplicate detection non-mutating.
+* Kept duplicate marking deterministic and idempotent.
+* Made duplicate marking clear existing selected-scope duplicate group IDs before recalculating.
+* Committed duplicate marking updates.
+* Returned duplicate rows after marking.
+* Left non-duplicate rows with `duplicate_group_id = NULL`.
+* Integrated duplicate marking into successful bank CSV import.
+* Kept `import_bank_statement_csv` public return value unchanged.
+* Exported duplicate detection functions from `src/reconcile/imports/__init__.py`.
+* Fixed accidental `_init_.py` filename issue so imports use the real package initializer.
+* Added `tests/test_bank_duplicate_detection.py`.
+* Tested row-hash duplicate detection and marking.
+* Tested external-ID duplicate detection and marking.
+* Tested fingerprint duplicate detection and marking.
+* Tested duplicate-rule precedence.
+* Tested detection versus marking behavior.
+* Tested marking idempotency.
+* Tested recalculation after adding new duplicate rows.
+* Tested import integration.
+* Tested scoped detection versus global detection.
+* Tested cross-import duplicate behavior.
+* Tested empty bank transaction behavior.
+* Tested blank `import_id` validation.
+* Tested duplicate detection does not append ledger events.
+* Tested duplicate detection does not modify accounting projection tables.
+* Did not add a duplicate reason database column.
+* Did not delete, merge, or alter source bank rows.
+* Did not alter raw descriptions.
+* Did not alter normalized descriptions.
+* Did not alter amounts.
+* Did not alter transaction dates.
+* Did not append ledger events.
+* Did not add bank import event handlers.
+* Did not modify projection rebuild behavior for bank imports.
+* Did not implement ledger cash movement extraction, reconciliation matching, fuzzy scoring, split matching, categorization, dashboard, full CLI workflow, CSV exports, or cash flow.
+
+Files created or edited:
 
 ```text
 src/reconcile/imports/duplicate_detection.py
 src/reconcile/imports/bank_csv.py
+src/reconcile/imports/__init__.py
 tests/test_bank_duplicate_detection.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Reconciliation matching
-* Categorization
-* Dashboard
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # 403 passed in 64.67s (0:01:04)
+python -m ruff check .  # All checks passed!
+git status              # run locally before commit
 ```
 
 Definition of done:
 
-* Duplicate rows are flagged.
-* Legitimate similar transactions are not deleted.
-* Duplicate logic is tested.
-* Tests pass.
+* `src/reconcile/imports/duplicate_detection.py` exists.
+* Duplicate row-hash groups are detected.
+* Duplicate external-ID groups are detected.
+* Duplicate transaction fingerprint groups are detected.
+* Duplicate detection returns group IDs and reasons.
+* Duplicate marking updates `bank_transactions.duplicate_group_id`.
+* Duplicate marking is deterministic and idempotent.
+* Bank CSV import marks duplicate rows after import.
+* Non-duplicate rows remain unmarked.
+* Duplicate rows are flagged, not deleted or merged.
+* No ledger cash movements, reconciliation matching, categorization, dashboard, CLI, CSV export, cash flow, or bank import events were added.
+* `tests/test_bank_duplicate_detection.py` covers duplicate rules, precedence, scoped detection, import integration, idempotency, and no accounting-state mutation.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 

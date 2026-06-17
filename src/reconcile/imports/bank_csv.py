@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from reconcile.exceptions import ValidationError
+from reconcile.imports.duplicate_detection import mark_duplicate_bank_transactions
 from reconcile.imports.normalization import normalize_bank_description
 from reconcile.money import parse_money_to_cents
 
@@ -155,6 +156,7 @@ def import_bank_statement_csv(
     except sqlite3.IntegrityError as exc:
         raise ValidationError("bank statement import could not be saved") from exc
 
+    mark_duplicate_bank_transactions(connection, import_id=clean_import_id)
     return clean_import_id
 
 
