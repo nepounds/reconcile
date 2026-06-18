@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 19 — Add fuzzy reconciliation scoring and ambiguity handling.
+Current step: Step 20 — Add split reconciliation matching.
 
-Status: Step 19 complete.
+Status: Step 20 complete.
 
-Approximate project completion: 62% to 64%.
+Approximate project completion: 66% to 68%.
 
 Current summary:
 
@@ -60,6 +60,14 @@ Current summary:
 * Step 19 prevents unsafe auto-matches when top candidates are too close.
 * Step 19 applies duplicate penalties and blocks duplicate-flagged bank rows from fuzzy auto-matching.
 * Step 19 enforces one-to-one ledger movement use for fuzzy auto-matches within a run.
+* Step 20 added limited split reconciliation matching for one bank transaction to two or three ledger cash movements.
+* Step 20 added bounded split candidate discovery using same-sign components, amount tolerance, date windows, and deterministic ordering.
+* Step 20 added split candidate scoring using amount, date, description, and split-penalty components.
+* Step 20 added split reconciliation run behavior with auto-matched, candidate, ambiguous, and unmatched decisions.
+* Step 20 stores split explanations with component movement IDs, component details, score components, and decision reasons.
+* Step 20 creates one ledger-link row per component only for split auto-matches.
+* Step 20 prevents component ledger movements from being reused across split auto-matches in the same run.
+* Step 20 blocks duplicate-flagged bank transactions from split auto-matching.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -83,7 +91,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Split matching, categorization, dashboard, full CLI workflow, cash flow, and CSV exports are still intentionally not implemented.
+* Categorization, dashboard, full CLI workflow, cash flow, CSV exports, manual review UI, confirmation/rejection events, and unlimited subset-sum split search are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -266,11 +274,121 @@ python -m pytest                                    # passed locally
 git status                                          # expected Step 19 files only
 ```
 
+Completed Step 20 files:
+
+```text
+src/reconcile/reconciliation/splits.py
+src/reconcile/reconciliation/models.py
+src/reconcile/reconciliation/explanations.py
+src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/__init__.py
+tests/test_reconciliation_splits.py
+docs/Reconciliation_Design.md
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 20 summary:
+
+* Added `src/reconcile/reconciliation/splits.py`.
+* Added `find_split_candidates(...)` for bounded two- and three-component split candidate discovery.
+* Added `score_split_candidate(...)` for scoring one bank transaction against multiple ledger cash movements.
+* Limited split candidates to two or three ledger cash movements only.
+* Rejected one-component split candidates.
+* Rejected more-than-three-component split candidates.
+* Rejected invalid `max_components` values below 2 or above 3.
+* Rejected negative amount tolerances, date windows, and split penalties.
+* Used standard-library deterministic combination search only.
+* Required all split component movements to have the same nonzero sign.
+* Rejected opposite-sign bank/component combinations.
+* Required the signed component total to match the bank transaction amount within tolerance.
+* Used integer cents for all money calculations.
+* Compared each component date to the bank transaction date with absolute day deltas.
+* Required every component movement to be inside the configured date window.
+* Stored component-level date deltas in split candidate explanations.
+* Stored summary date delta using the maximum absolute component date delta.
+* Scored split candidates with `amount_score * 0.70 + date_score * 0.25 + description_score * 0.05 - split_penalty`.
+* Used amount scoring against the summed component total.
+* Used conservative split date scoring with the minimum component date score.
+* Used best-component description scoring for split description support.
+* Clamped split scores between 0.0 and 100.0.
+* Returned split candidate result dictionaries with scores, deltas, component totals, component IDs, component details, and JSON-serializable score explanations.
+* Added deterministic split candidate ordering by score, amount delta, date delta, component count, and movement IDs.
+* Updated `src/reconcile/reconciliation/models.py` with `MATCH_TYPE_SPLIT = "split"`.
+* Preserved exact, fuzzy, unmatched, status, and run-status constants.
+* Updated `src/reconcile/reconciliation/explanations.py` with `build_split_match_explanation(...)`.
+* Split explanations include candidate score, amount score, date score, description score, split penalty, amount delta, date delta, component count, component total, component movement IDs, component details, decision status, auto-match flag, and reason text.
+* Updated `src/reconcile/reconciliation/matcher.py` with `run_split_reconciliation(...)`.
+* Reused existing reconciliation validation, run insertion, match insertion, ledger-link insertion, and deterministic matching patterns.
+* Stored split reconciliation run rows with completed status.
+* Stored split run configuration in `config_json`.
+* Selected imported bank transactions in the requested statement date range.
+* Used Step 17 `extract_ledger_cash_movements` for ledger-side cash movement extraction.
+* Generated split candidates from available ledger cash movements.
+* Stored split reconciliation match rows with split explanation JSON.
+* Created split ledger-link rows only for auto-matches.
+* Created one ledger-link row for each component movement in a split auto-match.
+* Did not create ledger-link rows for split candidate, ambiguous, or unmatched records.
+* Applied split auto-match threshold, candidate threshold, and ambiguity gap decision rules.
+* Created `auto_matched` rows only when the top split candidate met the auto threshold and had a sufficient gap from the second candidate.
+* Created `ambiguous` rows when top split candidates were too close to auto-match safely.
+* Created `candidate` rows when top split candidates met candidate threshold but not auto-match threshold.
+* Created `unmatched` rows when no split candidate existed or the best split candidate was below candidate threshold.
+* Blocked duplicate-flagged bank transactions from split auto-matching.
+* Ensured candidate and ambiguous split rows do not consume ledger movements.
+* Ensured a ledger cash movement can be consumed by at most one split auto-match in the same run.
+* Ensured each bank transaction receives at most one split reconciliation match record in a split run.
+* Preserved `run_exact_reconciliation`.
+* Preserved `run_fuzzy_reconciliation`.
+* Did not combine exact, fuzzy, and split workflows into one master function.
+* Updated `src/reconcile/reconciliation/__init__.py` to export split helpers and split reconciliation runner while preserving existing Step 17 through Step 19 exports.
+* Added `tests/test_reconciliation_splits.py`.
+* Tested two-component split candidates.
+* Tested three-component split candidates.
+* Tested that one-component and four-component split candidates are not returned.
+* Tested mixed-sign and opposite-sign rejection.
+* Tested amount tolerance, date window, scoring, split penalty, candidate shape, component details, and deterministic ordering.
+* Tested invalid helper inputs and invalid split run configuration values.
+* Tested split auto-matching for two and three ledger movements.
+* Tested within-tolerance split matching.
+* Tested wrong-sign, out-of-tolerance, and out-of-window split behavior.
+* Tested auto-match, candidate, ambiguous, and unmatched decision paths.
+* Tested duplicate-flagged bank rows do not auto-match.
+* Tested ledger-link creation for split auto-matches only.
+* Tested component ledger movements are not reused across split auto-matches.
+* Tested candidate and ambiguous rows do not consume component movements.
+* Tested deterministic split matching behavior.
+* Tested split reconciliation run rows, config JSON, provided run IDs, generated run IDs, and duplicate run ID validation.
+* Tested split reconciliation mutation safety for ledger events, bank rows, and accounting projection tables.
+* Updated `docs/Reconciliation_Design.md` to document implemented split matching behavior.
+* Documented split two- and three-component search, same-sign rule, amount tolerance, date window, scoring formula, split penalty, statuses, ledger-link behavior, and out-of-scope unlimited subset-sum/manual review UI.
+* Did not add CLI integration, categorization, dashboard, CSV export, cash flow reporting, manual confirmation/rejection, bank import events, or new accounting features.
+
+Commands run for Step 20:
+
+```bash
+python -m ruff check .
+python -m ruff check . --fix
+python -m pytest tests/test_reconciliation_splits.py
+python -m pytest
+git status
+```
+
+Results:
+
+```text
+python -m ruff check .                              # initially found unused imports and line-length issues
+python -m ruff check . --fix                        # removed safe unused imports
+python -m pytest tests/test_reconciliation_splits.py # 52 passed after threshold adjustment
+python -m ruff check .                              # All checks passed locally
+python -m pytest                                    # passed locally
+git status                                          # expected Step 20 files only
+```
+
 Next planned step:
 
-Step 20 — Add split reconciliation matching.
+Step 21 — Add CLI workflow.
 
-Step 20 status: Not started.
+Step 21 status: Not started.
 
 ---
 
@@ -4263,54 +4381,86 @@ Add fuzzy reconciliation scoring
 
 ### Step 20 — Add split reconciliation matching
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Match one bank transaction to two or three ledger cash movements.
 
-Expected work:
+Completed work:
 
-* Add split matching module.
-* Search combinations of 2 and 3 ledger movements.
-* Enforce same-sign rule.
-* Enforce date window.
-* Enforce amount tolerance.
-* Add split penalty.
-* Store split explanation.
-* Add tests.
+* Added split matching module.
+* Added bounded combinations of 2 and 3 ledger movements.
+* Enforced same-sign component rule.
+* Enforced opposite-sign bank/component rejection.
+* Enforced amount tolerance against summed component totals.
+* Enforced date window against every component movement.
+* Added split penalty.
+* Added split scoring formula and JSON-serializable score explanations.
+* Added split match explanations.
+* Added split reconciliation run function.
+* Added split auto-matched, candidate, ambiguous, and unmatched statuses.
+* Added one ledger-link row per component for split auto-matches only.
+* Preserved candidate and ambiguous rows as non-consuming review records.
+* Prevented component reuse across split auto-matches in the same run.
+* Preserved exact and fuzzy reconciliation behavior.
+* Added split reconciliation tests.
+* Updated reconciliation design documentation.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/reconciliation/splits.py
+src/reconcile/reconciliation/models.py
+src/reconcile/reconciliation/explanations.py
 src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/__init__.py
 tests/test_reconciliation_splits.py
 docs/Reconciliation_Design.md
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Unlimited subset-sum
-* Many bank transactions to one ledger entry
-* Dashboard
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
 python -m ruff check .
+python -m ruff check . --fix
+python -m pytest tests/test_reconciliation_splits.py
+python -m pytest
+git status
+```
+
+Results:
+
+```text
+python -m ruff check .                              # initially found unused imports and line-length issues
+python -m ruff check . --fix                        # removed safe unused imports
+python -m pytest tests/test_reconciliation_splits.py # 52 passed after threshold adjustment
+python -m ruff check .                              # All checks passed locally
+python -m pytest                                    # passed locally
+git status                                          # expected Step 20 files only
 ```
 
 Definition of done:
 
-* Two-line splits match.
-* Three-line splits match.
-* Wrong-sign splits are rejected.
-* Ambiguous splits are candidates, not unsafe auto-matches.
-* Tests pass.
-* Ruff passes.
+* `src/reconcile/reconciliation/splits.py` exists.
+* Split candidate discovery works for two and three ledger cash movements.
+* Split candidate scoring works with amount/date/description scores and split penalty.
+* `run_split_reconciliation` exists.
+* Split reconciliation stores reconciliation runs, match records, explanations, and ledger-link rows for auto-matches.
+* Split reconciliation distinguishes auto-matched, candidate, ambiguous, and unmatched statuses.
+* Split auto-matches create one ledger-link row per component.
+* Candidate and ambiguous split matches do not create ledger-link rows.
+* Duplicate-flagged bank rows are not unsafe auto-matched.
+* Component ledger movements are not reused across split auto-matches.
+* Exact reconciliation behavior from Step 18 still works.
+* Fuzzy reconciliation behavior from Step 19 still works.
+* `docs/Reconciliation_Design.md` documents split matching accurately.
+* No CLI, categorization, dashboard, CSV export, cash flow, manual confirmation/rejection, or new accounting features were added.
+* `tests/test_reconciliation_splits.py` covers split candidate discovery, split scoring, split reconciliation, ambiguity handling, duplicate handling, run config, and mutation safety.
+* Existing tests pass locally.
+* Ruff passes locally.
+* Project State is updated.
 
 Suggested commit message:
 

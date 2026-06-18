@@ -14,6 +14,7 @@ from reconcile.reconciliation.cash_movements import extract_ledger_cash_movement
 from reconcile.reconciliation.explanations import (
     build_exact_match_explanation,
     build_fuzzy_match_explanation,
+    build_split_match_explanation,
     build_unmatched_explanation,
 )
 from reconcile.reconciliation.models import (
@@ -23,10 +24,15 @@ from reconcile.reconciliation.models import (
     MATCH_STATUS_UNMATCHED,
     MATCH_TYPE_EXACT,
     MATCH_TYPE_FUZZY,
+    MATCH_TYPE_SPLIT,
     MATCH_TYPE_UNMATCHED,
     RECONCILIATION_RUN_STATUS_COMPLETED,
 )
 from reconcile.reconciliation.scoring import score_reconciliation_candidate
+from reconcile.reconciliation.splits import (
+    find_split_candidates,
+    score_split_candidate,
+)
 
 
 def _utc_now() -> str:
@@ -395,6 +401,38 @@ def _validate_fuzzy_thresholds(
         raise ValidationError("ambiguity_gap cannot be negative")
 
 
+
+def _validate_split_thresholds(
+    *,
+    amount_tolerance_cents: int,
+    date_window_days: int,
+    auto_match_threshold: float,
+    candidate_threshold: float,
+    ambiguity_gap: float,
+    split_penalty: float,
+    max_components: int,
+) -> None:
+    _validate_fuzzy_thresholds(
+        amount_tolerance_cents=amount_tolerance_cents,
+        date_window_days=date_window_days,
+        auto_match_threshold=auto_match_threshold,
+        candidate_threshold=candidate_threshold,
+        ambiguity_gap=ambiguity_gap,
+    )
+
+    if isinstance(split_penalty, bool) or not isinstance(split_penalty, int | float):
+        raise ValidationError("split_penalty must be a number")
+    if float(split_penalty) < 0.0:
+        raise ValidationError("split_penalty cannot be negative")
+
+    if isinstance(max_components, bool) or not isinstance(max_components, int):
+        raise ValidationError("max_components must be an integer")
+    if max_components < 2:
+        raise ValidationError("max_components cannot be less than 2")
+    if max_components > 3:
+        raise ValidationError("max_components cannot be greater than 3")
+
+
 def _fuzzy_candidate_sort_key(candidate: dict[str, Any]) -> tuple[object, ...]:
     return (
         -float(candidate["score"]),
@@ -479,6 +517,95 @@ def _empty_fuzzy_score(
             "reasons": [reason],
         },
     }
+
+
+def _split_candidate_summary(candidate: dict[str, Any]) -> dict[str, object]:
+    return {
+        "score": candidate["score"],
+        "amount_score": candidate["amount_score"],
+        "date_score": candidate["date_score"],
+        "description_score": candidate["description_score"],
+        "split_penalty": candidate["split_penalty"],
+        "amount_delta_cents": candidate["amount_delta_cents"],
+        "date_delta_days": candidate["date_delta_days"],
+        "component_count": candidate["component_count"],
+        "component_total_cents": candidate["component_total_cents"],
+        "component_movement_ids": candidate["component_movement_ids"],
+    }
+
+
+def _empty_split_score(
+    *,
+    amount_delta_cents: int,
+    date_delta_days: int | None,
+    reason: str,
+) -> dict[str, object]:
+    return {
+        "score": 0.0,
+        "amount_score": 0.0,
+        "date_score": 0.0,
+        "description_score": 0.0,
+        "split_penalty": 0.0,
+        "amount_delta_cents": amount_delta_cents,
+        "date_delta_days": date_delta_days,
+        "component_count": 0,
+        "component_total_cents": 0,
+        "component_movement_ids": [],
+        "components": [],
+        "score_explanation": {
+            "reason": reason,
+            "reasons": [reason],
+        },
+    }
+
+
+def _score_split_candidates_with_penalty(
+    *,
+    bank_row: sqlite3.Row,
+    available_movements: list[dict[str, Any]],
+    amount_tolerance_cents: int,
+    date_window_days: int,
+    split_penalty: float,
+    max_components: int,
+) -> list[dict[str, object]]:
+    raw_candidates = find_split_candidates(
+        dict(bank_row),
+        available_movements,
+        amount_tolerance_cents=amount_tolerance_cents,
+        date_window_days=date_window_days,
+        max_components=max_components,
+    )
+    movements_by_id = {
+        _movement_id(movement): movement for movement in available_movements
+    }
+
+    candidates: list[dict[str, object]] = []
+    for raw_candidate in raw_candidates:
+        components = [
+            movements_by_id[str(component_id)]
+            for component_id in raw_candidate["component_movement_ids"]
+        ]
+        candidates.append(
+            score_split_candidate(
+                dict(bank_row),
+                components,
+                amount_tolerance_cents=amount_tolerance_cents,
+                date_window_days=date_window_days,
+                split_penalty=split_penalty,
+            )
+        )
+
+    candidates.sort(
+        key=lambda candidate: (
+            -float(candidate["score"]),
+            abs(int(candidate["amount_delta_cents"])),
+            int(candidate["date_delta_days"]),
+            int(candidate["component_count"]),
+            tuple(str(value) for value in candidate["component_movement_ids"]),
+        )
+    )
+    return candidates
+
 
 
 def run_exact_reconciliation(
@@ -1025,6 +1152,273 @@ def run_fuzzy_reconciliation(
     }
 
 
+def run_split_reconciliation(
+    connection: sqlite3.Connection,
+    *,
+    cash_account_id: str,
+    statement_start_date: date,
+    statement_end_date: date,
+    reconciliation_run_id: str | None = None,
+    started_at: str | None = None,
+    amount_tolerance_cents: int = 5,
+    date_window_days: int = 3,
+    auto_match_threshold: float = 95.0,
+    candidate_threshold: float = 80.0,
+    ambiguity_gap: float = 10.0,
+    split_penalty: float = 5.0,
+    max_components: int = 3,
+) -> dict[str, object]:
+    """Run limited split reconciliation and persist the results."""
+    cash_account_id = _validate_nonblank(cash_account_id, "cash_account_id")
+    statement_start_date = _validate_date(
+        statement_start_date,
+        "statement_start_date",
+    )
+    statement_end_date = _validate_date(statement_end_date, "statement_end_date")
+    if statement_start_date > statement_end_date:
+        raise ValidationError("statement_start_date cannot be after statement_end_date")
+
+    _validate_split_thresholds(
+        amount_tolerance_cents=amount_tolerance_cents,
+        date_window_days=date_window_days,
+        auto_match_threshold=auto_match_threshold,
+        candidate_threshold=candidate_threshold,
+        ambiguity_gap=ambiguity_gap,
+        split_penalty=split_penalty,
+        max_components=max_components,
+    )
+    _validate_cash_account_exists(connection, cash_account_id)
+
+    if reconciliation_run_id is None:
+        reconciliation_run_id = f"recon-run-{uuid.uuid4().hex}"
+    else:
+        reconciliation_run_id = _validate_nonblank(
+            reconciliation_run_id,
+            "reconciliation_run_id",
+        )
+
+    if started_at is None:
+        started_at = _utc_now()
+    else:
+        started_at = _validate_nonblank(started_at, "started_at")
+    completed_at = _utc_now()
+    created_at = completed_at
+
+    config = {
+        "algorithm": "split_amount_date_description",
+        "match_types": [MATCH_TYPE_SPLIT, MATCH_TYPE_UNMATCHED],
+        "amount_tolerance_cents": amount_tolerance_cents,
+        "date_window_days": date_window_days,
+        "auto_match_threshold": float(auto_match_threshold),
+        "candidate_threshold": float(candidate_threshold),
+        "ambiguity_gap": float(ambiguity_gap),
+        "split_penalty": float(split_penalty),
+        "max_components": max_components,
+        "description_scoring": True,
+        "split_matching": True,
+        "duplicate_flagged_rows_auto_match": False,
+    }
+
+    bank_transactions = _load_bank_transactions(
+        connection,
+        start_date=statement_start_date,
+        end_date=statement_end_date,
+    )
+    ledger_movements = extract_ledger_cash_movements(
+        connection,
+        cash_account_id=cash_account_id,
+        start_date=statement_start_date,
+        end_date=statement_end_date,
+    )
+    ledger_movements = sorted(ledger_movements, key=_movement_sort_key)
+
+    auto_matched_count = 0
+    candidate_count = 0
+    ambiguous_count = 0
+    unmatched_count = 0
+    used_movement_ids: set[str] = set()
+
+    try:
+        with connection:
+            _insert_fuzzy_run(
+                connection,
+                reconciliation_run_id=reconciliation_run_id,
+                cash_account_id=cash_account_id,
+                statement_start_date=statement_start_date,
+                statement_end_date=statement_end_date,
+                started_at=started_at,
+                completed_at=completed_at,
+                config=config,
+            )
+
+            for index, bank_row in enumerate(bank_transactions, start=1):
+                bank_transaction_id = bank_row["bank_transaction_id"]
+                bank_amount = int(bank_row["amount_cents"])
+                duplicate_group_id = bank_row["duplicate_group_id"]
+                match_id = f"recon-match-{reconciliation_run_id}-{index:05d}"
+
+                available_movements = [
+                    movement
+                    for movement in ledger_movements
+                    if _movement_id(movement) not in used_movement_ids
+                ]
+                candidates = _score_split_candidates_with_penalty(
+                    bank_row=bank_row,
+                    available_movements=available_movements,
+                    amount_tolerance_cents=amount_tolerance_cents,
+                    date_window_days=date_window_days,
+                    split_penalty=split_penalty,
+                    max_components=max_components,
+                )
+                top = candidates[0] if candidates else None
+                near = candidates[1] if len(candidates) > 1 else None
+
+                if top is None:
+                    match_type = MATCH_TYPE_UNMATCHED
+                    status = MATCH_STATUS_UNMATCHED
+                    score = 0.0
+                    amount_delta = bank_amount
+                    date_delta = None
+                    auto_matched = False
+                    unmatched_count += 1
+                    reason = "No split candidates were found."
+                    score_details = _empty_split_score(
+                        amount_delta_cents=amount_delta,
+                        date_delta_days=date_delta,
+                        reason=reason,
+                    )
+                else:
+                    top_score = float(top["score"])
+                    near_score = float(near["score"]) if near else None
+                    score_gap = (
+                        top_score - near_score
+                        if near_score is not None
+                        else 100.0
+                    )
+                    duplicate_flagged = duplicate_group_id is not None
+
+                    if (
+                        top_score >= auto_match_threshold
+                        and score_gap >= ambiguity_gap
+                        and not duplicate_flagged
+                    ):
+                        match_type = MATCH_TYPE_SPLIT
+                        status = MATCH_STATUS_AUTO_MATCHED
+                        auto_matched = True
+                        auto_matched_count += 1
+                        reason = (
+                            "Top split candidate exceeded auto-match threshold "
+                            "with a sufficient score gap."
+                        )
+                    elif top_score >= auto_match_threshold and (
+                        score_gap < ambiguity_gap
+                    ):
+                        match_type = MATCH_TYPE_SPLIT
+                        status = MATCH_STATUS_AMBIGUOUS
+                        auto_matched = False
+                        ambiguous_count += 1
+                        reason = (
+                            "Top split candidates were too close to "
+                            "auto-match safely."
+                        )
+                    elif duplicate_flagged and top_score >= candidate_threshold:
+                        match_type = MATCH_TYPE_SPLIT
+                        status = MATCH_STATUS_CANDIDATE
+                        auto_matched = False
+                        candidate_count += 1
+                        reason = (
+                            "Duplicate-flagged bank transaction cannot be "
+                            "auto-matched."
+                        )
+                    elif candidate_threshold <= top_score < auto_match_threshold:
+                        match_type = MATCH_TYPE_SPLIT
+                        status = MATCH_STATUS_CANDIDATE
+                        auto_matched = False
+                        candidate_count += 1
+                        reason = (
+                            "Top split candidate met candidate threshold "
+                            "but not auto-match threshold."
+                        )
+                    else:
+                        match_type = MATCH_TYPE_UNMATCHED
+                        status = MATCH_STATUS_UNMATCHED
+                        auto_matched = False
+                        unmatched_count += 1
+                        reason = (
+                            "Top split candidate did not meet candidate "
+                            "threshold."
+                        )
+
+                    score = top_score if status != MATCH_STATUS_UNMATCHED else 0.0
+                    amount_delta = int(top["amount_delta_cents"])
+                    date_delta = int(top["date_delta_days"])
+                    score_details = top
+
+                explanation = build_split_match_explanation(
+                    bank_transaction_id=bank_transaction_id,
+                    score_details=score_details,
+                    decision_status=status,
+                    auto_matched=auto_matched,
+                    reason=reason,
+                    top_candidate=(
+                        _split_candidate_summary(top)
+                        if top is not None
+                        else None
+                    ),
+                    near_candidate=(
+                        _split_candidate_summary(near)
+                        if near is not None
+                        else None
+                    ),
+                )
+                _insert_match(
+                    connection,
+                    reconciliation_match_id=match_id,
+                    reconciliation_run_id=reconciliation_run_id,
+                    bank_transaction_id=bank_transaction_id,
+                    match_type=match_type,
+                    score=score,
+                    amount_delta_cents=amount_delta,
+                    date_delta_days=date_delta,
+                    status=status,
+                    explanation=explanation,
+                    created_at=created_at,
+                )
+
+                if auto_matched and top is not None:
+                    for component in top["components"]:
+                        _insert_ledger_link(
+                            connection,
+                            reconciliation_match_id=match_id,
+                            movement=component,
+                        )
+                    used_movement_ids.update(
+                        str(value) for value in top["component_movement_ids"]
+                    )
+    except sqlite3.IntegrityError as exc:
+        raise ValidationError("could not save reconciliation results") from exc
+
+    total_matches = (
+        auto_matched_count
+        + candidate_count
+        + ambiguous_count
+        + unmatched_count
+    )
+    return {
+        "reconciliation_run_id": reconciliation_run_id,
+        "cash_account_id": cash_account_id,
+        "statement_start_date": statement_start_date.isoformat(),
+        "statement_end_date": statement_end_date.isoformat(),
+        "status": RECONCILIATION_RUN_STATUS_COMPLETED,
+        "auto_matched_count": auto_matched_count,
+        "candidate_count": candidate_count,
+        "ambiguous_count": ambiguous_count,
+        "unmatched_count": unmatched_count,
+        "total_bank_transactions": len(bank_transactions),
+        "total_matches": total_matches,
+    }
+
+
 def get_reconciliation_run(
     connection: sqlite3.Connection,
     reconciliation_run_id: str,
@@ -1089,4 +1483,5 @@ __all__ = [
     "list_reconciliation_matches",
     "run_exact_reconciliation",
     "run_fuzzy_reconciliation",
+    "run_split_reconciliation",
 ]

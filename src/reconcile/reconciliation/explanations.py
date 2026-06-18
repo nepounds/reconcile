@@ -114,8 +114,48 @@ def build_fuzzy_match_explanation(
     return explanation
 
 
+def build_split_match_explanation(
+    *,
+    bank_transaction_id: str,
+    score_details: dict[str, object],
+    decision_status: str,
+    auto_matched: bool,
+    reason: str,
+    top_candidate: dict[str, object] | None = None,
+    near_candidate: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Return a plain explanation for a split match decision."""
+    explanation: dict[str, object] = {
+        "match_type": "split",
+        "reason": reason,
+        "bank_transaction_id": bank_transaction_id,
+        "decision_status": decision_status,
+        "auto_matched": auto_matched,
+        "score": score_details.get("score"),
+        "amount_score": score_details.get("amount_score"),
+        "date_score": score_details.get("date_score"),
+        "description_score": score_details.get("description_score"),
+        "split_penalty": score_details.get("split_penalty"),
+        "amount_delta_cents": score_details.get("amount_delta_cents"),
+        "date_delta_days": score_details.get("date_delta_days"),
+        "component_count": score_details.get("component_count"),
+        "component_total_cents": score_details.get("component_total_cents"),
+        "component_movement_ids": score_details.get("component_movement_ids"),
+        "components": score_details.get("components"),
+        "score_explanation": score_details.get("score_explanation"),
+    }
+
+    if top_candidate is not None:
+        explanation["top_candidate"] = top_candidate
+    if near_candidate is not None:
+        explanation["near_candidate"] = near_candidate
+
+    return explanation
+
+
 __all__ = [
     "build_exact_match_explanation",
     "build_fuzzy_match_explanation",
+    "build_split_match_explanation",
     "build_unmatched_explanation",
 ]

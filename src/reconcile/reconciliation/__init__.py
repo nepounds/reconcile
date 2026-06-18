@@ -7,6 +7,7 @@ from reconcile.reconciliation.cash_movements import (
 from reconcile.reconciliation.explanations import (
     build_exact_match_explanation,
     build_fuzzy_match_explanation,
+    build_split_match_explanation,
     build_unmatched_explanation,
 )
 from reconcile.reconciliation.matcher import (
@@ -14,6 +15,7 @@ from reconcile.reconciliation.matcher import (
     list_reconciliation_matches,
     run_exact_reconciliation,
     run_fuzzy_reconciliation,
+    run_split_reconciliation,
 )
 from reconcile.reconciliation.models import (
     MATCH_STATUS_AMBIGUOUS,
@@ -22,6 +24,7 @@ from reconcile.reconciliation.models import (
     MATCH_STATUS_UNMATCHED,
     MATCH_TYPE_EXACT,
     MATCH_TYPE_FUZZY,
+    MATCH_TYPE_SPLIT,
     MATCH_TYPE_UNMATCHED,
     RECONCILIATION_RUN_STATUS_COMPLETED,
 )
@@ -32,6 +35,10 @@ from reconcile.reconciliation.scoring import (
     score_description_match,
     score_reconciliation_candidate,
 )
+from reconcile.reconciliation.splits import (
+    find_split_candidates,
+    score_split_candidate,
+)
 
 __all__ = [
     "MATCH_STATUS_AMBIGUOUS",
@@ -40,20 +47,25 @@ __all__ = [
     "MATCH_STATUS_UNMATCHED",
     "MATCH_TYPE_EXACT",
     "MATCH_TYPE_FUZZY",
+    "MATCH_TYPE_SPLIT",
     "MATCH_TYPE_UNMATCHED",
     "RECONCILIATION_RUN_STATUS_COMPLETED",
     "build_exact_match_explanation",
     "build_fuzzy_match_explanation",
+    "build_split_match_explanation",
     "build_unmatched_explanation",
     "days_between",
     "extract_ledger_cash_movements",
+    "find_split_candidates",
     "get_cash_account",
     "get_reconciliation_run",
     "list_reconciliation_matches",
     "run_exact_reconciliation",
     "run_fuzzy_reconciliation",
+    "run_split_reconciliation",
     "score_amount_match",
     "score_date_match",
     "score_description_match",
     "score_reconciliation_candidate",
+    "score_split_candidate",
 ]
