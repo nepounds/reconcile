@@ -1,6 +1,6 @@
 # Reconcile
 
-Reconcile is a local-first Python accounting engine that uses event-sourced double-entry bookkeeping, rebuildable SQLite projections, property-tested accounting invariants, and explainable bank reconciliation logic.
+Reconcile is a local-first Python accounting engine that uses event-sourced double-entry bookkeeping, rebuildable SQLite projections, property-tested accounting invariants, and explainable bank reconciliation.
 
 It is built as a portfolio project for accounting, finance, data, and software engineering roles.
 
@@ -17,54 +17,60 @@ Reconcile is currently in active development.
 Current completed milestone:
 
 ```text
-Step 18 — Exact reconciliation matching
+Step 20 — Split reconciliation matching
 ```
 
 Approximate project completion:
 
 ```text
-58% to 60%
+66% to 68%
 ```
 
 Current validation status:
 
 ```text
-441 tests passing
-ruff clean
+Tests pass locally
+ruff clean locally
 ```
 
-The core accounting engine is working. The project can now:
-
-* Open accounts through immutable accounting events.
-* Post balanced double-entry journal entries.
-* Reject invalid or unbalanced journal entries.
-* Build account-balance projections.
-* Rebuild projections from the append-only event log.
-* Generate a trial balance.
-* Generate an income statement.
-* Generate a balance sheet.
-* Reverse posted journal entries through immutable reversal events.
-* Run property-based accounting invariant tests with Hypothesis.
-* Import fake bank statement CSV data.
-* Normalize bank transaction descriptions.
-* Detect and flag duplicate imported bank transactions.
-* Extract ledger cash movements from journal lines that touch a selected cash account.
-* Run exact reconciliation matching between imported bank transactions and ledger cash movements.
-* Store reconciliation runs, match records, match explanations, and ledger-link rows.
+The hardest reconciliation-engine stretch is now complete. Reconcile can import bank transactions, extract ledger cash movements, run exact reconciliation, run fuzzy scoring, identify ambiguous candidates, and match one bank transaction to two or three ledger cash movements through split matching.
 
 Still planned:
 
-* Fuzzy reconciliation scoring.
-* Ambiguity handling.
-* Split reconciliation matching.
-* CLI workflow.
-* Report exports and sample outputs.
-* Rule-based categorization.
-* Optional correction-based local classifier.
-* Cash flow report.
-* Streamlit dashboard.
-* CI workflow.
-* Final documentation polish.
+* CLI workflow
+* Report exports and sample outputs
+* Rule-based categorization
+* Optional correction-based local classifier
+* Cash flow report
+* Streamlit dashboard
+* CI workflow
+* Final documentation and portfolio polish
+
+---
+
+## What Reconcile does today
+
+Reconcile currently supports:
+
+* Opening accounts through immutable accounting events.
+* Posting balanced double-entry journal entries.
+* Rejecting invalid or unbalanced journal entries.
+* Building account-balance projections.
+* Rebuilding projections from the append-only event log.
+* Generating a trial balance.
+* Generating an income statement.
+* Generating a balance sheet.
+* Reversing posted journal entries through immutable reversal events.
+* Running property-based accounting invariant tests with Hypothesis.
+* Importing fake bank statement CSV data.
+* Normalizing bank transaction descriptions.
+* Detecting and flagging duplicate imported bank transactions.
+* Extracting ledger cash movements from selected cash accounts.
+* Running exact reconciliation matching.
+* Running fuzzy reconciliation scoring.
+* Detecting ambiguous reconciliation candidates.
+* Running limited split reconciliation matching.
+* Storing reconciliation runs, match records, match explanations, and ledger-link rows.
 
 ---
 
@@ -72,20 +78,20 @@ Still planned:
 
 Accounting systems are not just CRUD apps.
 
-A useful accounting engine needs to preserve history, prove that entries balance, rebuild derived state, explain reconciliation decisions, and avoid unsafe automatic matches.
+A useful accounting engine needs to preserve history, prove entries balance, rebuild derived state, explain reconciliation decisions, and avoid unsafe automatic matches.
 
 Reconcile demonstrates those ideas in a small, local-first Python project.
 
 The goal is not to replace QuickBooks, Xero, or an ERP. The goal is to show a clear, testable accounting engine with the kind of design choices used in real accounting and fintech systems:
 
-* Append-only event history.
-* Double-entry validation.
-* Reversal entries instead of mutation.
-* Rebuildable projections.
-* Integer-cents money handling.
-* Point-in-time financial reports.
-* Explainable reconciliation logic.
-* Property-based invariant tests.
+* Append-only event history
+* Double-entry validation
+* Reversal entries instead of mutation
+* Rebuildable projections
+* Integer-cents money handling
+* Point-in-time financial reports
+* Explainable reconciliation logic
+* Property-based invariant tests
 
 ---
 
@@ -97,7 +103,7 @@ Resume-style summary:
 
 Longer explanation:
 
-> Reconcile is a local-first Python accounting engine that records accounting actions as append-only events, projects those events into SQL read models, generates financial statements, imports bank transactions, extracts ledger cash movements, and reconciles bank activity against the ledger with stored match explanations.
+> Reconcile is a local-first Python accounting engine that records accounting actions as append-only events, projects those events into SQL read models, generates financial statements, imports bank transactions, extracts ledger cash movements, and reconciles bank activity against the ledger with exact, fuzzy, ambiguous, and split-match explanations.
 
 ---
 
@@ -144,6 +150,12 @@ Core architecture rule:
 
 ```text
 If a feature changes financial state, it must do so through an event.
+```
+
+Reconciliation rule:
+
+```text
+If the program makes a match decision, store why it made that decision.
 ```
 
 ---
@@ -247,7 +259,7 @@ Implemented SQLite tables:
 * `reconciliation_matches`
 * `reconciliation_match_ledger_links`
 
-The schema supports the current accounting engine and planned reconciliation workflows.
+The schema supports the current accounting engine and reconciliation workflows.
 
 ---
 
@@ -365,18 +377,6 @@ Implemented:
 * Validate account and balance data read from SQLite.
 * Confirm trial balance stays balanced for valid ledgers.
 
-Trial balance rows include:
-
-* Account ID
-* Account code
-* Account name
-* Account type
-* Normal balance
-* Debit total cents
-* Credit total cents
-* Ending debit balance cents
-* Ending credit balance cents
-
 ---
 
 ### Income statement report
@@ -391,16 +391,6 @@ Implemented:
 * Validate date arguments.
 * Reject invalid stored account or journal-line data.
 
-Income statement output includes:
-
-* Start date
-* End date
-* Revenue accounts
-* Expense accounts
-* Total revenue cents
-* Total expense cents
-* Net income cents
-
 ---
 
 ### Balance sheet report
@@ -413,19 +403,6 @@ Implemented:
 * Calculate balances from posted journal lines through the as-of date.
 * Avoid relying only on cumulative account balance projections for date-filtered reporting.
 * Validate stored account and journal-line data.
-
-Balance sheet output includes:
-
-* As-of date
-* Asset accounts
-* Liability accounts
-* Equity accounts
-* Current period net income cents
-* Total assets cents
-* Total liabilities cents
-* Total equity cents
-* Total liabilities and equity cents
-* Balanced status
 
 ---
 
@@ -618,24 +595,104 @@ amount_delta_cents = 0
 date_delta_days = 0
 ```
 
-Unmatched record values:
+---
+
+### Fuzzy reconciliation scoring
+
+Implemented:
+
+* Score amount similarity.
+* Score date proximity.
+* Score description similarity.
+* Apply duplicate penalties.
+* Store score component explanations.
+* Create fuzzy reconciliation runs.
+* Store fuzzy match records.
+* Distinguish auto-matched, candidate, ambiguous, and unmatched decisions.
+* Prevent unsafe auto-matches when top candidates are too close.
+* Block duplicate-flagged bank transactions from fuzzy auto-matching.
+* Prevent ledger movement reuse across fuzzy auto-matches.
+
+Default fuzzy score:
 
 ```text
-match_type = unmatched
-status = unmatched
-score = 0.0
+score = amount_score * 0.60
+      + date_score * 0.25
+      + description_score * 0.15
+      - duplicate_penalty
+```
+
+Default fuzzy decisions:
+
+```text
+score >= 95 and score gap >= 10:
+    auto_matched
+
+80 <= score < 95:
+    candidate
+
+score >= 95 but top candidates are close:
+    ambiguous
+
+score < 80:
+    unmatched
+```
+
+---
+
+### Split reconciliation matching
+
+Implemented:
+
+* Match one bank transaction to two or three ledger cash movements.
+* Search bounded combinations only.
+* Enforce same-sign component rules.
+* Enforce amount tolerance against summed component totals.
+* Enforce date windows against every component movement.
+* Score split candidates.
+* Apply split penalty.
+* Store split explanation JSON.
+* Create one ledger-link row per component for split auto-matches.
+* Keep candidate and ambiguous split rows non-consuming.
+* Prevent component reuse across split auto-matches.
+* Preserve exact and fuzzy reconciliation behavior.
+
+Default split score:
+
+```text
+score = amount_score * 0.70
+      + date_score * 0.25
+      + description_score * 0.05
+      - split_penalty
+```
+
+Default split rules:
+
+```text
+Only combine 2 or 3 ledger cash movements.
+Only combine same-sign movements.
+Only search within the date window.
+Only accept combinations that sum to the bank amount within tolerance.
+Do not run unlimited subset-sum search.
+```
+
+Example:
+
+```text
+Bank withdrawal:
+-150.00
+
+Ledger movements:
+-50.00 Software expense
+-100.00 Office supplies
+
+Split match total:
+-150.00
 ```
 
 ---
 
 ## Current test suite
-
-Current status:
-
-```text
-441 passed
-ruff clean
-```
 
 The test suite covers:
 
@@ -657,6 +714,8 @@ The test suite covers:
 * Bank duplicate detection
 * Ledger cash movement extraction
 * Exact reconciliation matching
+* Fuzzy reconciliation scoring
+* Split reconciliation matching
 
 Standard validation commands:
 
@@ -717,6 +776,8 @@ reconcile/
 │   ├── test_money.py
 │   ├── test_projection_rebuild.py
 │   ├── test_reconciliation_exact.py
+│   ├── test_reconciliation_fuzzy.py
+│   ├── test_reconciliation_splits.py
 │   └── test_reports.py
 ├── pyproject.toml
 └── README.md
@@ -799,53 +860,12 @@ No real bank data, customer data, private financial data, or credentials should 
 * Step 16 — Bank duplicate detection
 * Step 17 — Ledger cash movement extraction
 * Step 18 — Exact reconciliation matching
+* Step 19 — Fuzzy reconciliation scoring and ambiguity handling
+* Step 20 — Split reconciliation matching
 
 ---
 
 ### Next planned work
-
-#### Step 19 — Fuzzy reconciliation scoring and ambiguity handling
-
-Planned:
-
-* Add amount score.
-* Add date score.
-* Add description score.
-* Add duplicate penalty.
-* Add candidate scoring.
-* Add score thresholds.
-* Add top-candidate gap rule.
-* Prevent unsafe auto-matches.
-* Store score component explanations.
-
-This step will move reconciliation beyond exact same-date/same-amount matches.
-
----
-
-#### Step 20 — Split reconciliation matching
-
-Planned:
-
-* Match one bank transaction to two or three ledger cash movements.
-* Enforce same-sign split rules.
-* Enforce date windows.
-* Enforce amount tolerance.
-* Add split penalty.
-* Store split explanations.
-
-Example:
-
-```text
-Bank withdrawal: -150.00
-
-Ledger movements:
-- Software expense: -50.00
-- Office supplies: -100.00
-
-Split match total: -150.00
-```
-
----
 
 #### Step 21 — CLI workflow
 
@@ -857,7 +877,7 @@ Planned:
 * Rebuild projections.
 * Generate reports.
 * Import bank statements.
-* Run reconciliation.
+* Run reconciliation workflows.
 
 The CLI should call package functions and keep business logic out of script wrappers.
 
@@ -949,6 +969,7 @@ Planned:
 * Show reconciliation status.
 * Show scores and explanations.
 * Show ambiguous candidates.
+* Show split components.
 * Show categorization decisions and reasons.
 
 ---
@@ -1018,6 +1039,7 @@ The MVP does not include:
 * Real company data
 * Real bank data
 * Direct mutation of posted accounting history
+* Unlimited subset-sum reconciliation search
 
 ---
 
@@ -1025,16 +1047,15 @@ The MVP does not include:
 
 Current limitations are intentional while the project is still under development:
 
-* Fuzzy reconciliation is not implemented yet.
-* Split reconciliation is not implemented yet.
-* Reconciliation confirmation/rejection events are not implemented yet.
-* Bank import currently writes directly to bank tables instead of using bank import events.
 * CLI workflow is not implemented yet.
-* Streamlit dashboard is not implemented yet.
 * CSV report exports are not implemented yet.
 * Cash flow report is not implemented yet.
 * Rule-based categorization is not implemented yet.
-* CI workflow is not implemented yet.
+* Correction storage and classifier workflow are not implemented yet.
+* Streamlit dashboard is not implemented yet.
+* Reconciliation confirmation/rejection events are not implemented yet.
+* Bank import currently writes directly to bank tables instead of using bank import events.
+* Split reconciliation intentionally supports only two or three ledger components.
 * README quickstart will need final polish after CLI and dashboard work exist.
 
 ---
@@ -1061,6 +1082,8 @@ Add bank CSV import and normalization
 Add bank duplicate detection
 Add ledger cash movement extraction
 Add exact reconciliation matching
+Add fuzzy reconciliation scoring
+Add split reconciliation matching
 ```
 
 ---
