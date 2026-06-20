@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 23 — Add rule-based categorization.
+Current step: Step 24 — Add correction storage and optional local classifier.
 
-Status: Step 23 complete.
+Status: Step 24 complete.
 
-Approximate project completion: 76% to 78%.
+Approximate project completion: 79% to 81%.
 
 Current summary:
 
@@ -93,6 +93,15 @@ Current summary:
 * Step 23 added fake/demo-friendly default rules for owner contributions, software, office supplies, meals, rent, and revenue.
 * Step 23 added a read-only helper to load imported bank transactions for categorization review without mutating source rows or appending events.
 * Step 23 added focused categorization tests covering validation, normalization, rule matching, deterministic categorization, default rules, transaction validation, read-only loading, and mutation safety.
+* Step 24 added append-only categorization correction storage in SQLite.
+* Step 24 added an idempotent `category_corrections` schema initializer without modifying the core database initializer.
+* Step 24 added correction recording, correction listing, latest-correction lookup, training example extraction, and correction application helpers.
+* Step 24 keeps category corrections separate from imported bank transaction rows and does not store final categories on `bank_transactions`.
+* Step 24 added deterministic correction precedence where latest correction wins for each bank transaction.
+* Step 24 added a small optional local standard-library classifier based on nearest token overlap instead of adding scikit-learn.
+* Step 24 added rule/correction/classifier precedence: latest correction, then rule, then confident local classifier, then uncategorized.
+* Step 24 added classifier confidence handling and low-confidence uncategorized results.
+* Step 24 added focused correction and classifier tests covering validation, ordering, mutation safety, training behavior, prediction behavior, and precedence.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -116,7 +125,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Correction storage, local ML classifier, dashboard, cash flow, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+* Dashboard, cash flow, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -515,6 +524,67 @@ tests/test_categorization_rules.py
 docs/Reconcile_Project_State.md
 ```
 
+Completed Step 24 files:
+
+```text
+src/reconcile/categorization/corrections.py
+src/reconcile/categorization/classifier.py
+src/reconcile/categorization/__init__.py
+tests/test_categorization_corrections.py
+tests/test_categorization_classifier.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 24 summary:
+
+* Added `src/reconcile/categorization/corrections.py`.
+* Added `initialize_categorization_schema(connection)` to create `category_corrections` idempotently.
+* Added `record_category_correction(...)` for append-only user category corrections.
+* Validated bank transaction IDs, corrected categories, optional corrected-by values, optional reasons, and optional ISO-like correction timestamps.
+* Required corrections to reference existing bank transactions.
+* Generated UUID-based correction IDs.
+* Preserved explicit correction timestamps and populated omitted timestamps with current UTC timestamps.
+* Added `list_category_corrections(...)` with deterministic ordering and optional bank transaction filtering.
+* Added `latest_category_correction(...)` using deterministic newest-correction ordering.
+* Added `training_examples_from_corrections(...)` by joining corrections to imported bank transactions.
+* Preferred normalized descriptions as classifier text and fell back to raw descriptions.
+* Preserved signed integer `amount_cents` in training examples.
+* Added `apply_corrections_to_categorized_results(...)` so latest corrections override existing categorized result dictionaries without mutating inputs.
+* Added `src/reconcile/categorization/classifier.py`.
+* Implemented the optional classifier as a deterministic standard-library nearest-token-overlap classifier.
+* Did not add scikit-learn or any other dependency in Step 24.
+* Added `train_category_classifier(...)` with validation for empty, malformed, and single-category training data.
+* Added `predict_category(...)` and `predict_categories(...)` with confidence threshold handling.
+* Added low-confidence uncategorized behavior with clear classifier confidence reasons.
+* Added `categorize_with_rules_corrections_and_classifier(...)` with final precedence: correction, rule, classifier, uncategorized.
+* Confirmed corrections override rules and classifier predictions.
+* Confirmed rules override classifier predictions.
+* Confirmed classifier runs only when no correction exists and no rule matches.
+* Updated `src/reconcile/categorization/__init__.py` to preserve Step 23 exports and add Step 24 correction/classifier exports.
+* Added `tests/test_categorization_corrections.py`.
+* Added `tests/test_categorization_classifier.py`.
+* Tested correction schema creation, idempotency, append-only recording, listing, latest lookup, training example extraction, correction application, validation errors, ordering, and mutation safety.
+* Tested classifier training validation, prediction, low-confidence behavior, confidence thresholds, JSON serialization, prediction ordering, precedence, no-mutation behavior, no-file-write behavior, and no-database-touch behavior.
+* Did not add dashboard categorization review, CLI categorization workflow, cash flow, Streamlit dashboard, CI, manual reconciliation confirmation/rejection, external APIs, LLM categorization, cloud model calls, reconciliation changes, report export changes, or new accounting behavior.
+
+Commands run for Step 24:
+
+```bash
+python -m pytest tests/test_categorization_classifier.py
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest tests/test_categorization_classifier.py  # 23 passed after confidence threshold fix
+python -m pytest                                          # all tests passed locally
+python -m ruff check .                                    # All checks passed after line-length cleanup
+git status                                                # expected Step 24 files only
+```
+
 Completed Step 23 summary:
 
 * Added `src/reconcile/categorization/__init__.py`.
@@ -556,9 +626,9 @@ git status              # expected Step 23 files only
 
 Next planned step:
 
-Step 24 — Add correction storage and optional local classifier.
+Step 25 — Add cash flow report.
 
-Step 24 status: Not started.
+Step 25 status: Not started.
 
 ---
 
@@ -834,6 +904,7 @@ Project-specific constraints:
 * Log or print at external boundaries, not deep inside business logic.
 * Use clear names that describe what things are.
 * Every public function should have one job and a short docstring.
+* Keep generated Python code within Ruff's configured 88-character line limit. Break long function signatures, SQL strings, parametrized test cases, and error messages before handing off code.
 * Add tests for edge cases, not just happy paths.
 * Prefer small, reviewable patches over full-file rewrites.
 * Do not recreate working files blindly.
@@ -1627,6 +1698,21 @@ CREATE TABLE bank_transactions (
 );
 ```
 
+### `category_corrections`
+
+```sql
+CREATE TABLE category_corrections (
+    correction_id TEXT PRIMARY KEY,
+    bank_transaction_id TEXT NOT NULL,
+    corrected_category TEXT NOT NULL,
+    corrected_by TEXT,
+    reason TEXT,
+    corrected_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(bank_transaction_id) REFERENCES bank_transactions(bank_transaction_id)
+);
+```
+
 ### `reconciliation_runs`
 
 ```sql
@@ -1838,7 +1924,7 @@ CLI/interface rules:
 | `reconciliation/explanations.py`   | Build match explanation objects.                            |
 | `categorization/rules.py`          | Apply deterministic category rules.                         |
 | `categorization/corrections.py`    | Store user corrections.                                     |
-| `categorization/classifier.py`     | Optional local scikit-learn classifier.                     |
+| `categorization/classifier.py`     | Optional local classifier trained from corrections.         |
 | `cli.py`                           | Parse CLI arguments and coordinate workflows.               |
 | `dashboard/streamlit_app.py`       | Display reports, audit timeline, and reconciliation review. |
 
@@ -1867,7 +1953,7 @@ Planned runtime dependencies:
 * `streamlit` — dashboard/demo interface.
 * `pandas` — dashboard tables and export-friendly data handling.
 * `plotly` — optional dashboard charts.
-* `scikit-learn` — optional local categorization classifier, added only when classifier work begins.
+* `scikit-learn` — optional future categorization dependency if the standard-library classifier becomes insufficient.
 
 Planned development dependencies:
 
@@ -1887,7 +1973,7 @@ Dependency rule:
 
 Dependency timing rule:
 
-> Do not add `scikit-learn` until the local classifier step begins.
+> Step 24 implemented a simple standard-library local classifier instead of adding `scikit-learn`. Add `scikit-learn` later only if it clearly improves the project without dependency friction.
 
 ---
 
@@ -4968,58 +5054,88 @@ Add rule-based categorization
 
 ### Step 24 — Add correction storage and optional local classifier
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Add user correction tracking and optional local ML categorization.
+* Add user correction tracking and an optional local-only categorization classifier.
 
-Expected work:
+Completed work:
 
-* Add correction storage.
-* Add training data extraction from corrections.
-* Add optional scikit-learn classifier.
-* Add confidence threshold.
-* Make rules override ML predictions.
-* Keep classifier local.
-* Add tests.
+* Added `src/reconcile/categorization/corrections.py`.
+* Added idempotent `category_corrections` schema initialization.
+* Added append-only correction recording for imported bank transactions.
+* Added validation for bank transaction IDs, corrected categories, optional correction metadata, and ISO-like correction timestamps.
+* Required corrections to reference existing `bank_transactions` rows.
+* Added deterministic correction listing and latest-correction lookup.
+* Added correction-based training example extraction joined to bank transaction descriptions and amounts.
+* Added correction application helper where the latest correction overrides categorized result dictionaries without mutating inputs.
+* Added `src/reconcile/categorization/classifier.py`.
+* Implemented a deterministic standard-library nearest-token-overlap classifier instead of adding scikit-learn.
+* Kept the classifier local-only, in-memory, optional, and non-persistent.
+* Added confidence threshold validation and low-confidence uncategorized behavior.
+* Added combined categorization precedence: latest correction, then rule, then confident classifier, then uncategorized.
+* Updated `src/reconcile/categorization/__init__.py` to export Step 24 helpers while preserving Step 23 exports.
+* Added `tests/test_categorization_corrections.py`.
+* Added `tests/test_categorization_classifier.py`.
+* Did not edit `pyproject.toml` because no new dependency was added.
+* Did not add scikit-learn in Step 24.
+* Did not add dashboard review, CLI categorization workflow, cash flow, Streamlit, CI, manual reconciliation review, confirmation/rejection events, external APIs, LLM calls, cloud calls, reconciliation changes, report export changes, or new accounting behavior.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/categorization/corrections.py
 src/reconcile/categorization/classifier.py
+src/reconcile/categorization/__init__.py
+tests/test_categorization_corrections.py
 tests/test_categorization_classifier.py
-pyproject.toml
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* External APIs
-* LLM categorization
-* Cloud model calls
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest tests/test_categorization_classifier.py  # 23 passed after confidence threshold fix
+python -m pytest                                          # all tests passed locally
+python -m ruff check .                                    # All checks passed after line-length cleanup
+git status                                                # expected Step 24 files only
 ```
 
 Definition of done:
 
-* Corrections can be stored.
-* Classifier can train from corrections.
-* Low-confidence predictions are handled safely.
-* Rules override classifier predictions.
-* Tests pass.
-* Ruff passes.
+* `src/reconcile/categorization/corrections.py` exists.
+* `src/reconcile/categorization/classifier.py` exists.
+* `tests/test_categorization_corrections.py` exists.
+* `tests/test_categorization_classifier.py` exists.
+* Categorization correction schema can be initialized.
+* Corrections can be recorded append-only.
+* Corrections can be listed.
+* Latest correction can be retrieved.
+* Training examples can be extracted from corrections.
+* Corrections can override categorized results.
+* Correction behavior is deterministic and JSON-serializable.
+* Correction logic does not mutate bank transactions.
+* Correction read paths are mutation-safe.
+* Step 23 rule-based categorization still works.
+* Classifier tests cover local prediction, confidence behavior, and precedence.
+* Classifier implementation is local-only and uses the standard library.
+* Existing tests should pass locally.
+* Ruff should pass locally.
+* Project State is updated.
 
 Suggested commit message:
 
 ```text
-Add local categorization corrections and classifier
+Add categorization corrections and local classifier
 ```
 
 ---
