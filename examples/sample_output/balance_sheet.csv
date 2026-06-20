@@ -1,0 +1,6 @@
+section,account_id,account_code,account_name,account_type,amount_cents
+asset,acct-cash,1000,Cash,asset,525000
+asset,acct-1100,1100,Accounts Receivable,asset,0
+liability,acct-2000,2000,Accounts Payable,liability,0
+equity,acct-3000,3000,Owner Equity,equity,500000
+equity,,,Current Period Net Income,equity,25000

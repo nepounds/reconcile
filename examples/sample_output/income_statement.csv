@@ -1,0 +1,4 @@
+section,account_id,account_code,account_name,account_type,amount_cents
+revenue,acct-4000,4000,Service Revenue,revenue,120000
+expense,acct-5000,5000,Rent Expense,expense,90000
+expense,acct-5100,5100,Software Expense,expense,5000

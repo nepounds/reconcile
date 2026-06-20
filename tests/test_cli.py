@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import sqlite3
 import subprocess
 import sys
@@ -377,3 +378,155 @@ def test_init_db_can_be_opened_by_package_connection(tmp_path: Path) -> None:
         count = connection.execute("SELECT COUNT(*) FROM ledger_events").fetchone()[0]
 
     assert count == 0
+
+
+def test_export_reports_succeeds_after_demo_seed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    db_path = _seeded_db(tmp_path)
+    output_dir = tmp_path / "sample_output"
+
+    result = main(
+        [
+            "export-reports",
+            "--db-path",
+            db_path,
+            "--output-dir",
+            str(output_dir),
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-01-31",
+            "--as-of",
+            "2026-01-31",
+        ]
+    )
+
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "Exported reports" in output
+    assert "trial_balance" in output
+    assert "income_statement" in output
+    assert "balance_sheet" in output
+    assert "reconciliation_results: skipped" in output
+
+    assert (output_dir / "trial_balance.csv").exists()
+    assert (output_dir / "income_statement.csv").exists()
+    assert (output_dir / "balance_sheet.csv").exists()
+    assert not (output_dir / "reconciliation_results.csv").exists()
+
+
+def test_export_reports_supports_custom_output_directory(tmp_path: Path) -> None:
+    db_path = _seeded_db(tmp_path)
+    output_dir = tmp_path / "custom" / "nested" / "exports"
+
+    result = main(
+        [
+            "export-reports",
+            "--db-path",
+            db_path,
+            "--output-dir",
+            str(output_dir),
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-01-31",
+            "--as-of",
+            "2026-01-31",
+        ]
+    )
+
+    assert result == 0
+    assert (output_dir / "trial_balance.csv").exists()
+    assert (output_dir / "income_statement.csv").exists()
+    assert (output_dir / "balance_sheet.csv").exists()
+
+
+def test_export_reports_with_reconciliation_run_id_exports_results(
+    tmp_path: Path,
+) -> None:
+    db_path = _seeded_db_with_bank(tmp_path)
+    output_dir = tmp_path / "sample_output"
+
+    assert (
+        main(
+            [
+                "reconcile",
+                "exact",
+                "--db-path",
+                db_path,
+                "--cash-account-id",
+                _cash_account_id(),
+                "--from",
+                "2026-01-01",
+                "--to",
+                "2026-01-31",
+            ]
+        )
+        == 0
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        run_id = connection.execute(
+            """
+            SELECT reconciliation_run_id
+            FROM reconciliation_runs
+            ORDER BY started_at DESC, reconciliation_run_id DESC
+            LIMIT 1
+            """
+        ).fetchone()[0]
+
+    result = main(
+        [
+            "export-reports",
+            "--db-path",
+            db_path,
+            "--output-dir",
+            str(output_dir),
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-01-31",
+            "--as-of",
+            "2026-01-31",
+            "--reconciliation-run-id",
+            run_id,
+        ]
+    )
+
+    assert result == 0
+    assert (output_dir / "reconciliation_results.csv").exists()
+
+    with (output_dir / "reconciliation_results.csv").open(
+        newline="",
+        encoding="utf-8",
+    ) as file_obj:
+        rows = list(csv.DictReader(file_obj))
+
+    assert rows
+    assert rows[0]["reconciliation_run_id"] == run_id
+
+
+def test_export_reports_invalid_date_arguments_return_nonzero(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    result = main(
+        [
+            "export-reports",
+            "--db-path",
+            db_path,
+            "--from",
+            "2026-01-01T00:00:00",
+            "--to",
+            "2026-01-31",
+            "--as-of",
+            "2026-01-31",
+        ]
+    )
+
+    assert result != 0
+    assert "YYYY-MM-DD" in capsys.readouterr().err

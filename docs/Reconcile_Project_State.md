@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 21 — Add CLI workflow.
+Current step: Step 22 — Add report exports and sample outputs.
 
-Status: Step 21 complete.
+Status: Step 22 complete.
 
-Approximate project completion: 70% to 72%.
+Approximate project completion: 73% to 75%.
 
 Current summary:
 
@@ -73,6 +73,17 @@ Current summary:
 * Step 21 added CLI workflows for database initialization, demo seeding, projection rebuilds, reports, bank import, and exact/fuzzy/split reconciliation.
 * Step 21 keeps CLI output plain text and keeps business logic inside existing package modules.
 * Step 21 added CLI tests covering command wiring, demo seeding, reporting, bank import, reconciliation commands, validation errors, and wrapper smoke behavior.
+* Step 22 added stable CSV exports for trial balance, income statement, balance sheet, and reconciliation results.
+* Step 22 added `src/reconcile/reports/export.py` with read-only export functions that create parent output directories as needed.
+* Step 22 added `export_all_reports` for coordinated report export into an output directory.
+* Step 22 exports integer cents only and does not format report money as dollars.
+* Step 22 exports report data rows only and keeps totals in returned summary dictionaries.
+* Step 22 exports reconciliation results by joining reconciliation matches to bank transactions and aggregating ledger links.
+* Step 22 skips `reconciliation_results.csv` when no reconciliation run ID is provided.
+* Step 22 added `export-reports` as a top-level CLI command.
+* Step 22 wired CLI report exports to `export_all_reports` while keeping CLI business logic thin.
+* Step 22 generated fake sample output CSV files under `examples/sample_output/`.
+* Step 22 added report export tests and CLI export tests covering file creation, headers, row counts, summaries, reconciliation exports, validation errors, and mutation safety.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -96,7 +107,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Categorization, dashboard, cash flow, CSV exports, manual review UI, confirmation/rejection events, and unlimited subset-sum split search are still intentionally not implemented.
+* Categorization, dashboard, cash flow, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -389,11 +400,108 @@ python -m pytest                                    # passed locally
 git status                                          # expected Step 20 files only
 ```
 
+Completed Step 22 files:
+
+```text
+src/reconcile/reports/export.py
+src/reconcile/reports/__init__.py
+src/reconcile/cli.py
+tests/test_report_exports.py
+tests/test_cli.py
+examples/sample_output/trial_balance.csv
+examples/sample_output/income_statement.csv
+examples/sample_output/balance_sheet.csv
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 22 summary:
+
+* Added `src/reconcile/reports/export.py`.
+* Added `export_trial_balance_csv(connection, output_path)`.
+* Added `export_income_statement_csv(connection, *, start_date, end_date, output_path)`.
+* Added `export_balance_sheet_csv(connection, *, as_of_date, output_path)`.
+* Added `export_reconciliation_results_csv(connection, *, reconciliation_run_id, output_path)`.
+* Added `export_all_reports(connection, *, output_dir, income_start_date, income_end_date, balance_sheet_as_of_date, reconciliation_run_id=None)`.
+* Used standard-library CSV writing with `csv.DictWriter`.
+* Used `pathlib.Path` and created output parent directories as needed.
+* Returned JSON-serializable summary dictionaries with string file paths and data-row counts.
+* Kept export functions read-only.
+* Confirmed export functions do not append ledger events.
+* Confirmed export functions do not mutate accounts, journal entries, journal lines, account balances, bank transactions, reconciliation runs, reconciliation matches, or reconciliation ledger links.
+* Exported trial balance rows with account identity, account type, normal balance, debit totals, credit totals, ending debit balances, and ending credit balances.
+* Kept trial balance totals in the returned summary instead of appending a totals row to the CSV.
+* Exported income statement rows with `section` values of `revenue` and `expense`.
+* Kept income statement totals in the returned summary instead of appending totals rows to the CSV.
+* Exported balance sheet rows with `section` values of `asset`, `liability`, and `equity`.
+* Included Current Period Net Income as a separate equity row in the balance sheet CSV.
+* Kept balance sheet totals in the returned summary instead of appending totals rows to the CSV.
+* Exported reconciliation results by joining `reconciliation_matches` to `bank_transactions`.
+* Aggregated `reconciliation_match_ledger_links` into deterministic delimiter-separated ledger entry and line ID fields.
+* Exported one reconciliation CSV row per reconciliation match.
+* Preserved stored reconciliation explanation JSON in the export.
+* Validated blank reconciliation run IDs and missing reconciliation run IDs with `ValidationError`.
+* Implemented `export_all_reports` output filenames:
+
+```text
+trial_balance.csv
+income_statement.csv
+balance_sheet.csv
+reconciliation_results.csv
+```
+
+* Skipped `reconciliation_results.csv` in `export_all_reports` when no reconciliation run ID was provided.
+* Updated `src/reconcile/reports/__init__.py` to export Step 22 export helpers while preserving existing report exports.
+* Added `export-reports` as a top-level CLI subcommand.
+* Added CLI support for `--db-path`, `--output-dir`, `--from`, `--to`, `--as-of`, and optional `--reconciliation-run-id`.
+* Reused the existing CLI ISO date parser for export date arguments.
+* Kept CLI export behavior as a thin wrapper over `export_all_reports`.
+* Printed concise CLI success output with generated paths and row counts.
+* Added `tests/test_report_exports.py`.
+* Tested trial balance CSV file creation, parent directory creation, header columns, data-row counts, deterministic account ordering, summary totals, balanced status, and mutation safety.
+* Tested income statement CSV headers, revenue and expense sections, totals, net income, and invalid date ranges.
+* Tested balance sheet CSV headers, asset/liability/equity sections, Current Period Net Income row, totals, balanced status, and invalid as-of dates.
+* Tested reconciliation result CSV headers, bank transaction fields, match fields, score and delta fields, explanation JSON, ledger link fields, missing run IDs, and blank run IDs.
+* Tested `export_all_reports` with and without reconciliation run IDs.
+* Updated `tests/test_cli.py` with `export-reports` command coverage.
+* Tested CLI export success after demo seeding.
+* Tested custom export output directories.
+* Tested CLI reconciliation export when a run ID is provided.
+* Tested invalid export date arguments return nonzero and print clear stderr.
+* Generated fake sample output CSVs under `examples/sample_output/`.
+* Did not commit `exports/reconcile.db`.
+* Did not add real bank data or private financial data.
+* Did not add cash flow, categorization, Streamlit dashboard, CI, manual reconciliation confirmation/rejection, Excel export, JSON export, PDF export, or new accounting behavior.
+
+Commands run for Step 22:
+
+```bash
+python scripts/run_reconcile.py init-db --db-path exports/reconcile.db
+python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+python -m pytest
+python -m ruff check .
+```
+
+Results:
+
+```text
+python scripts/run_reconcile.py init-db --db-path exports/reconcile.db  # Initialized database
+python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db # reported acct-cash already existed because the local demo database was already seeded
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+# Exported reports to: examples\sample_output
+# trial_balance: examples\sample_output\trial_balance.csv (9 rows)
+# income_statement: examples\sample_output\income_statement.csv (3 rows)
+# balance_sheet: examples\sample_output\balance_sheet.csv (5 rows)
+# reconciliation_results: skipped
+python -m pytest        # passed locally
+python -m ruff check .  # All checks passed locally
+```
+
 Next planned step:
 
-Step 22 — Add report exports and sample outputs.
+Step 23 — Add rule-based categorization.
 
-Step 22 status: Not started.
+Step 23 status: Not started.
 
 ---
 
@@ -4609,51 +4717,80 @@ Add Reconcile CLI workflow
 
 ### Step 22 — Add report exports and sample outputs
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Export reports and reconciliation results to stable output files.
 
-Expected work:
+Completed work:
 
-* Add export behavior.
-* Export trial balance.
-* Export income statement.
-* Export balance sheet.
-* Export reconciliation results.
-* Generate fake sample outputs.
-* Add tests that inspect output contents.
+* Added stable CSV export behavior for existing reports.
+* Added reconciliation result CSV export behavior.
+* Added coordinated all-report export behavior.
+* Added CLI `export-reports` command.
+* Generated fake sample output files.
+* Added report export tests.
+* Added CLI export tests.
+* Confirmed exports are read-only and mutation-safe.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/reports/export.py
-examples/sample_output/
+src/reconcile/reports/__init__.py
+src/reconcile/cli.py
 tests/test_report_exports.py
+tests/test_cli.py
+examples/sample_output/trial_balance.csv
+examples/sample_output/income_statement.csv
+examples/sample_output/balance_sheet.csv
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Dashboard
-* Cash flow
-* ML categorization
-
-Commands to run:
+Commands run:
 
 ```bash
+python scripts/run_reconcile.py init-db --db-path exports/reconcile.db
+python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
 python -m pytest
 python -m ruff check .
-python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output
+```
+
+Results:
+
+```text
+python scripts/run_reconcile.py init-db --db-path exports/reconcile.db  # Initialized database
+python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db # reported acct-cash already existed because the local demo database was already seeded
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+# Exported reports to: examples\sample_output
+# trial_balance: examples\sample_output\trial_balance.csv (9 rows)
+# income_statement: examples\sample_output\income_statement.csv (3 rows)
+# balance_sheet: examples\sample_output\balance_sheet.csv (5 rows)
+# reconciliation_results: skipped
+python -m pytest        # passed locally
+python -m ruff check .  # All checks passed locally
 ```
 
 Definition of done:
 
-* Output files use official names.
-* Output files are generated from fake data.
+* `src/reconcile/reports/export.py` exists.
+* `tests/test_report_exports.py` exists.
+* Trial balance CSV export works.
+* Income statement CSV export works.
+* Balance sheet CSV export works.
+* Reconciliation results CSV export works.
+* `export_all_reports` works.
+* CLI `export-reports` command works.
+* Fake sample output CSV files are generated under `examples/sample_output/`.
+* Export functions are read-only and mutation-safe.
+* Existing report functions still work.
+* Existing CLI commands still work.
 * Tests pass.
 * Ruff passes.
+* No cash flow, categorization, dashboard, CI, Excel export, PDF export, JSON export, or new accounting behavior was added.
+* Project State is updated.
 
 Suggested commit message:
 

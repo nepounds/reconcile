@@ -26,6 +26,7 @@ from reconcile.reconciliation.matcher import (
     run_split_reconciliation,
 )
 from reconcile.reports.balance_sheet import generate_balance_sheet
+from reconcile.reports.export import export_all_reports
 from reconcile.reports.income_statement import (
     generate_income_statement,
 )
@@ -82,6 +83,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_db_path(rebuild)
     rebuild.set_defaults(handler=_handle_rebuild_projections)
+
+    export_reports = subparsers.add_parser(
+        "export-reports",
+        help="Export implemented reports to CSV files.",
+    )
+    _add_db_path(export_reports)
+    export_reports.add_argument("--output-dir", default="exports")
+    export_reports.add_argument("--from", dest="from_date", required=True)
+    export_reports.add_argument("--to", dest="to_date", required=True)
+    export_reports.add_argument("--as-of", dest="as_of_date", required=True)
+    export_reports.add_argument("--reconciliation-run-id")
+    export_reports.set_defaults(handler=_handle_export_reports)
 
     report = subparsers.add_parser("report", help="Generate text reports.")
     report_subparsers = report.add_subparsers(dest="report_command", required=True)
@@ -210,6 +223,37 @@ def _handle_rebuild_projections(args: argparse.Namespace) -> int:
     print(f"Rebuilt projections for: {args.db_path}")
     for table_name in sorted(counts):
         print(f"{table_name}: {counts[table_name]}")
+    return 0
+
+
+def _handle_export_reports(args: argparse.Namespace) -> int:
+    start_date = _parse_iso_date(args.from_date)
+    end_date = _parse_iso_date(args.to_date)
+    as_of_date = _parse_iso_date(args.as_of_date)
+
+    with _connection(args.db_path) as connection:
+        summary = export_all_reports(
+            connection,
+            output_dir=args.output_dir,
+            income_start_date=start_date,
+            income_end_date=end_date,
+            balance_sheet_as_of_date=as_of_date,
+            reconciliation_run_id=args.reconciliation_run_id,
+        )
+
+    print(f"Exported reports to: {summary['output_dir']}")
+    _print_export_summary("trial_balance", summary["trial_balance"])
+    _print_export_summary("income_statement", summary["income_statement"])
+    _print_export_summary("balance_sheet", summary["balance_sheet"])
+
+    reconciliation_summary = summary["reconciliation_results"]
+    if isinstance(reconciliation_summary, dict) and reconciliation_summary.get(
+        "skipped"
+    ):
+        print("reconciliation_results: skipped")
+    else:
+        _print_export_summary("reconciliation_results", reconciliation_summary)
+
     return 0
 
 
@@ -591,3 +635,13 @@ def _print_reconciliation_result(title: str, result: Any) -> None:
         value = _get_result_value(result, key)
         if value is not None:
             print(f"{key}: {value}")
+
+
+def _print_export_summary(name: str, summary: object) -> None:
+    if not isinstance(summary, dict):
+        print(f"{name}: unavailable")
+        return
+
+    output_path = summary.get("output_path")
+    row_count = summary.get("row_count", 0)
+    print(f"{name}: {output_path} ({row_count} rows)")
