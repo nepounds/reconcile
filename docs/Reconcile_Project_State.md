@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 22 — Add report exports and sample outputs.
+Current step: Step 23 — Add rule-based categorization.
 
-Status: Step 22 complete.
+Status: Step 23 complete.
 
-Approximate project completion: 73% to 75%.
+Approximate project completion: 76% to 78%.
 
 Current summary:
 
@@ -84,6 +84,15 @@ Current summary:
 * Step 22 wired CLI report exports to `export_all_reports` while keeping CLI business logic thin.
 * Step 22 generated fake sample output CSV files under `examples/sample_output/`.
 * Step 22 added report export tests and CLI export tests covering file creation, headers, row counts, summaries, reconciliation exports, validation errors, and mutation safety.
+* Step 23 added deterministic rule-based categorization for imported bank transactions.
+* Step 23 added immutable `CategoryRule` models with validation for rule IDs, categories, priorities, text criteria, tokens, amount bounds, and amount signs.
+* Step 23 added rule matching for normalized descriptions, raw-description fallback, any-token rules, all-token rules, amount ranges, and amount signs.
+* Step 23 added explainable categorization result dictionaries with category, source, rule ID, reason, matched priority, matched description, and amount cents.
+* Step 23 added deterministic rule ordering where highest priority wins and tied priorities sort by rule ID.
+* Step 23 added uncategorized result behavior using `category=None` when no rule matches.
+* Step 23 added fake/demo-friendly default rules for owner contributions, software, office supplies, meals, rent, and revenue.
+* Step 23 added a read-only helper to load imported bank transactions for categorization review without mutating source rows or appending events.
+* Step 23 added focused categorization tests covering validation, normalization, rule matching, deterministic categorization, default rules, transaction validation, read-only loading, and mutation safety.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -107,7 +116,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Categorization, dashboard, cash flow, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+* Correction storage, local ML classifier, dashboard, cash flow, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -497,11 +506,59 @@ python -m pytest        # passed locally
 python -m ruff check .  # All checks passed locally
 ```
 
+Completed Step 23 files:
+
+```text
+src/reconcile/categorization/__init__.py
+src/reconcile/categorization/rules.py
+tests/test_categorization_rules.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 23 summary:
+
+* Added `src/reconcile/categorization/__init__.py`.
+* Added `src/reconcile/categorization/rules.py`.
+* Added immutable `CategoryRule` dataclass validation.
+* Added `normalize_rule_text`.
+* Added `match_category_rule`.
+* Added `categorize_transaction`.
+* Added `categorize_transactions`.
+* Added `default_category_rules`.
+* Added read-only `load_bank_transactions_for_categorization`.
+* Rule matching supports normalized-description matching, raw-description fallback, phrase matching, any-token matching, all-token matching, amount ranges, and positive/negative/any amount signs.
+* Categorization results are plain JSON-serializable dictionaries.
+* Categorized results include bank transaction ID, category, category source, category rule ID, category reason, matched rule priority, matched description, and amount cents.
+* Uncategorized results use `category=None`, `category_source=None`, `category_rule_id=None`, and a clear reason.
+* Rule application is deterministic: highest priority wins, then tied priorities sort by rule ID.
+* Categorization does not mutate input transaction dictionaries.
+* Categorization does not write to SQLite.
+* The read helper preserves raw descriptions, normalized descriptions, signed integer amounts, and deterministic ordering.
+* Added `tests/test_categorization_rules.py`.
+* Tested rule validation errors, text normalization, phrase/token/amount/sign matching, categorization ordering, default rules, transaction validation, read helper behavior, and mutation safety.
+* Did not add correction storage, categorization persistence, local ML classifier, scikit-learn, CLI categorization workflow, dashboard review UI, cash flow, or new accounting behavior.
+
+Commands run for Step 23:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # passed locally
+python -m ruff check .  # All checks passed locally
+git status              # expected Step 23 files only
+```
+
 Next planned step:
 
-Step 23 — Add rule-based categorization.
+Step 24 — Add correction storage and optional local classifier.
 
-Step 23 status: Not started.
+Step 24 status: Not started.
 
 ---
 
@@ -4802,21 +4859,63 @@ Add report exports and sample outputs
 
 ### Step 23 — Add rule-based categorization
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Add deterministic category rules for imported bank transactions.
 
-Expected work:
+Completed work:
 
-* Add categorization rules module.
-* Add category rule model.
-* Apply rules by priority.
-* Store category source/reason.
-* Add tests.
+* Added `src/reconcile/categorization/__init__.py`.
+* Added Step 23 public categorization exports only.
+* Added `src/reconcile/categorization/rules.py`.
+* Added frozen `CategoryRule` dataclass.
+* Validated `rule_id` as a nonblank string.
+* Validated `category` as a nonblank string.
+* Validated `priority` as an int and rejected bool values.
+* Validated optional string fields as nonblank when provided.
+* Validated description token tuples as tuples containing only nonblank strings.
+* Validated amount bounds as ints and rejected bool values.
+* Rejected min amount greater than max amount.
+* Validated `amount_sign` as `positive`, `negative`, `any`, or `None`.
+* Added deterministic text normalization for rule and transaction text.
+* Added `normalize_rule_text(value)`.
+* Added `match_category_rule(transaction, rule)`.
+* Added `categorize_transaction(transaction, rules)`.
+* Added `categorize_transactions(transactions, rules)`.
+* Added `default_category_rules()`.
+* Added optional read-only `load_bank_transactions_for_categorization(connection)`.
+* Rule matching prefers `description_normalized` and falls back to `description_raw`.
+* Rule matching supports phrase contains checks.
+* Rule matching supports any-token checks.
+* Rule matching supports all-token checks.
+* Rule matching supports amount minimums and maximums.
+* Rule matching supports positive, negative, and any amount signs.
+* Categorization validates required transaction identity and amount fields.
+* Missing descriptions are allowed but do not match description-based rules.
+* Categorization results are JSON-serializable plain dictionaries.
+* Categorized results include category, source, rule ID, reason, priority, matched description, and amount cents.
+* Uncategorized results use `category=None` and clear reason text.
+* Rule ordering is deterministic with highest priority first and rule ID tie-breaks.
+* Only one category is returned per transaction.
+* Default rules cover owner contribution, software, office supplies, meals, rent, and revenue without using external data or ML.
+* Categorization functions do not mutate input transaction dictionaries.
+* Categorization functions do not write to SQLite.
+* Categorization functions do not append ledger events or mutate accounting, bank, reconciliation, or report state.
+* Added `tests/test_categorization_rules.py`.
+* Tested valid rule creation and all required invalid rule cases.
+* Tested text normalization behavior.
+* Tested phrase, any-token, all-token, amount range, and sign matching.
+* Tested explainable match result fields.
+* Tested highest-priority and tied-priority deterministic categorization.
+* Tested uncategorized behavior.
+* Tested transaction validation errors.
+* Tested default rule behavior for demo-like transactions.
+* Tested read helper deterministic ordering, description preservation, signed amount preservation, bank-row mutation safety, and event-store safety.
+* Did not add correction storage, categorization persistence, local ML classifier, scikit-learn, CLI categorization workflow, dashboard review UI, cash flow, CI, or new accounting behavior.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/categorization/__init__.py
@@ -4825,25 +4924,39 @@ tests/test_categorization_rules.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* scikit-learn classifier
-* Dashboard categorization review
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+```
+
+Results:
+
+```text
+python -m pytest        # passed locally
+python -m ruff check .  # All checks passed locally
+git status              # expected Step 23 files only
 ```
 
 Definition of done:
 
-* Rules assign categories deterministically.
-* Rule explanations are stored or returned.
-* Unmatched transactions remain uncategorized.
-* Tests pass.
+* `src/reconcile/categorization/__init__.py` exists.
+* `src/reconcile/categorization/rules.py` exists.
+* `tests/test_categorization_rules.py` exists.
+* Category rules validate inputs.
+* Rule matching works for descriptions, tokens, amount ranges, and signs.
+* Default rules exist.
+* Categorization results include category, source, rule ID, reason, matched description, and amount.
+* Unknown transactions remain uncategorized.
+* Categorization is deterministic.
+* Categorization does not mutate source transaction dictionaries.
+* Categorization does not write to the database.
+* No correction storage, classifier, dashboard, CLI categorization, persistence schema, cash flow, or new accounting behavior was added.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 
