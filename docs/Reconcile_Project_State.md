@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 20 — Add split reconciliation matching.
+Current step: Step 21 — Add CLI workflow.
 
-Status: Step 20 complete.
+Status: Step 21 complete.
 
-Approximate project completion: 66% to 68%.
+Approximate project completion: 70% to 72%.
 
 Current summary:
 
@@ -68,6 +68,11 @@ Current summary:
 * Step 20 creates one ledger-link row per component only for split auto-matches.
 * Step 20 prevents component ledger movements from being reused across split auto-matches in the same run.
 * Step 20 blocks duplicate-flagged bank transactions from split auto-matching.
+* Step 21 added a thin `argparse` CLI at `src/reconcile/cli.py`.
+* Step 21 added `scripts/run_reconcile.py` as a thin wrapper around `reconcile.cli.main`.
+* Step 21 added CLI workflows for database initialization, demo seeding, projection rebuilds, reports, bank import, and exact/fuzzy/split reconciliation.
+* Step 21 keeps CLI output plain text and keeps business logic inside existing package modules.
+* Step 21 added CLI tests covering command wiring, demo seeding, reporting, bank import, reconciliation commands, validation errors, and wrapper smoke behavior.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -91,7 +96,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Categorization, dashboard, full CLI workflow, cash flow, CSV exports, manual review UI, confirmation/rejection events, and unlimited subset-sum split search are still intentionally not implemented.
+* Categorization, dashboard, cash flow, CSV exports, manual review UI, confirmation/rejection events, and unlimited subset-sum split search are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -386,9 +391,9 @@ git status                                          # expected Step 20 files onl
 
 Next planned step:
 
-Step 21 — Add CLI workflow.
+Step 22 — Add report exports and sample outputs.
 
-Step 21 status: Not started.
+Step 22 status: Not started.
 
 ---
 
@@ -4472,26 +4477,66 @@ Add split reconciliation matching
 
 ### Step 21 — Add CLI workflow
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Add a thin CLI that wires together the tested engine workflows.
 
-Expected work:
+Completed work:
 
-* Add `cli.py`.
-* Add `scripts/run_reconcile.py`.
-* Support database initialization.
-* Support demo seeding.
-* Support projection rebuild.
-* Support reports.
-* Support bank import.
-* Support reconciliation run.
-* Add CLI tests.
-* Run manual smoke checks.
+* Added `src/reconcile/cli.py`.
+* Added `scripts/run_reconcile.py`.
+* Added `tests/test_cli.py`.
+* Implemented a standard-library `argparse` CLI.
+* Exposed public `main(argv: list[str] | None = None) -> int`.
+* Returned integer exit codes from package CLI logic instead of calling `sys.exit` inside `src/reconcile/`.
+* Kept `scripts/run_reconcile.py` as a thin wrapper around `reconcile.cli.main`.
+* Added default `--db-path exports/reconcile.db`.
+* Added `init-db`.
+* Added `seed-demo`.
+* Added `rebuild-projections`.
+* Added `report trial-balance`.
+* Added `report income-statement`.
+* Added `report balance-sheet`.
+* Added `import-bank`.
+* Added `reconcile exact`.
+* Added `reconcile fuzzy`.
+* Added `reconcile split`.
+* Added ISO date parsing that accepts `YYYY-MM-DD` and rejects datetimes.
+* Converted expected `ReconcileError` and `ValidationError` failures into nonzero exits with clear stderr output.
+* Kept output plain text.
+* Printed concise command success messages and report/reconciliation summaries.
+* Seeded demo accounts through existing `open_account` service behavior.
+* Seeded demo journal entries through existing `post_journal_entry` service behavior.
+* Did not insert accounts or journal entries directly into projection tables.
+* Imported bank CSVs through existing `import_bank_statement_csv` behavior.
+* Rebuilt projections through existing `rebuild_projections` behavior.
+* Generated CLI reports through existing report functions.
+* Ran exact, fuzzy, and split reconciliation through existing reconciliation functions.
+* Added CLI tests for help behavior.
+* Added CLI tests for database initialization and expected schema tables.
+* Added CLI tests for demo account seeding through events.
+* Added CLI tests for demo journal posting through events.
+* Added CLI tests for projection rebuild behavior.
+* Added CLI tests for trial balance, income statement, and balance sheet commands.
+* Added CLI tests for invalid report dates.
+* Added CLI tests for bank import.
+* Added CLI tests for exact, fuzzy, and split reconciliation command wiring.
+* Added CLI tests for expected validation errors returning nonzero exits.
+* Added wrapper script smoke coverage.
+* Did not add report exports.
+* Did not add sample output generation.
+* Did not add rule-based categorization.
+* Did not add a local ML classifier.
+* Did not add cash flow reporting.
+* Did not add Streamlit dashboard behavior.
+* Did not add CI.
+* Did not add manual reconciliation confirmation/rejection workflow.
+* Did not add confirmation/rejection events.
+* Did not add new accounting behavior.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/cli.py
@@ -4500,29 +4545,59 @@ tests/test_cli.py
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Streamlit dashboard
-* Rule-based categorization
-* ML classifier
-
-Commands to run:
+Commands run during Step 21 implementation thread:
 
 ```bash
-python -m pytest
+python -m pytest tests/test_cli.py
 python -m ruff check .
+python -m ruff check . --fix
+git status
+```
+
+Latest visible results from the Step 21 thread:
+
+```text
+python -m pytest tests/test_cli.py  # initially collected 19 tests; 16 passed and 3 failed before report-shape and wrapper-path fixes
+python -m ruff check .              # initially found one unused import and two line-length issues
+python -m ruff check . --fix        # removed the unused import; two manual line-length fixes remained
+git status                          # showed expected untracked Step 21 files only
+```
+
+Final local validation commands to run before committing:
+
+```bash
+python -m ruff check .
+python -m pytest tests/test_cli.py
+python -m pytest
+python scripts/run_reconcile.py --help
 python scripts/run_reconcile.py init-db --db-path exports/reconcile.db
 python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db
 python scripts/run_reconcile.py rebuild-projections --db-path exports/reconcile.db
+git status
 ```
 
 Definition of done:
 
-* CLI wrapper is thin.
-* Core logic remains in package modules.
-* CLI smoke checks pass.
-* Tests pass.
-* Ruff passes.
+* `src/reconcile/cli.py` exists.
+* `scripts/run_reconcile.py` exists.
+* `tests/test_cli.py` exists.
+* CLI uses `argparse`.
+* CLI exposes `main(argv=None) -> int`.
+* CLI commands are thin wrappers around existing package functions.
+* `init-db` works.
+* `seed-demo` works through event-sourced services.
+* `rebuild-projections` works.
+* Trial balance CLI report works.
+* Income statement CLI report works.
+* Balance sheet CLI report works.
+* Bank import CLI works.
+* Exact reconciliation CLI works.
+* Fuzzy reconciliation CLI works.
+* Split reconciliation CLI is wired.
+* Expected validation errors produce nonzero exits and clear stderr output.
+* CLI tests cover the new workflow.
+* No report exports, categorization, dashboard, cash flow, CI, or new accounting behavior was added.
+* Project State is updated.
 
 Suggested commit message:
 
