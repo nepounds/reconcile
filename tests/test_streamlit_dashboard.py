@@ -14,7 +14,9 @@ from dashboard.streamlit_app import (
     DEFAULT_END_DATE,
     DEFAULT_START_DATE,
     PAGE_BALANCE_SHEET,
+    PAGE_BANK_RECONCILIATION,
     PAGE_CASH_FLOW,
+    PAGE_CATEGORIZATION_REVIEW,
     PAGE_EVENT_TIMELINE,
     PAGE_INCOME_STATEMENT,
     PAGE_OVERVIEW,
@@ -25,14 +27,23 @@ from dashboard.streamlit_app import (
     format_cents_for_dashboard,
     load_balance_sheet_report,
     load_cash_flow_report,
+    load_categorization_review,
+    load_categorization_review_rows,
+    load_category_correction_summary,
     load_dashboard_summary,
     load_database_counts,
     load_event_timeline,
     load_income_statement_report,
+    load_reconciliation_match_details,
+    load_reconciliation_review,
+    load_reconciliation_runs,
     load_trial_balance_preview,
     load_trial_balance_report,
+    parse_explanation_json,
     render_balance_sheet_page,
+    render_bank_reconciliation_page,
     render_cash_flow_page,
+    render_categorization_review_page,
     render_event_timeline_page,
     render_income_statement_page,
     render_overview,
@@ -305,6 +316,23 @@ def _insert_demo_bank_and_reconciliation_data(
             "2026-01-31T00:00:01+00:00",
         ),
     )
+    connection.execute(
+        """
+        INSERT INTO reconciliation_match_ledger_links (
+            reconciliation_match_id,
+            journal_entry_id,
+            journal_entry_line_id,
+            amount_cents
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            "match-demo",
+            "je-owner-contribution",
+            "line-owner-contribution-cash",
+            500_000,
+        ),
+    )
     connection.commit()
 
 
@@ -337,6 +365,8 @@ def test_dashboard_navigation_and_page_helpers_exist() -> None:
         PAGE_BALANCE_SHEET,
         PAGE_CASH_FLOW,
         PAGE_EVENT_TIMELINE,
+        PAGE_BANK_RECONCILIATION,
+        PAGE_CATEGORIZATION_REVIEW,
     )
     assert callable(render_overview)
     assert callable(render_trial_balance_page)
@@ -344,6 +374,8 @@ def test_dashboard_navigation_and_page_helpers_exist() -> None:
     assert callable(render_balance_sheet_page)
     assert callable(render_cash_flow_page)
     assert callable(render_event_timeline_page)
+    assert callable(render_bank_reconciliation_page)
+    assert callable(render_categorization_review_page)
 
 
 def test_default_report_dates_are_available() -> None:
@@ -865,3 +897,501 @@ def test_helper_functions_do_not_write_exports(tmp_path: Path) -> None:
     load_event_timeline(db_path)
 
     assert not exports_path.exists()
+
+
+
+def _insert_category_corrections_table(
+    connection: sqlite3.Connection,
+) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS category_corrections (
+            correction_id TEXT PRIMARY KEY,
+            bank_transaction_id TEXT NOT NULL,
+            corrected_category TEXT NOT NULL,
+            corrected_by TEXT,
+            reason TEXT,
+            corrected_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(bank_transaction_id)
+                REFERENCES bank_transactions(bank_transaction_id)
+        )
+        """
+    )
+
+
+def _insert_categorization_review_bank_rows(
+    connection: sqlite3.Connection,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO bank_statement_imports (
+            import_id,
+            source_name,
+            file_name,
+            file_hash,
+            imported_at,
+            row_count
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "import-categorization",
+            "demo",
+            "categorization.csv",
+            "hash-categorization",
+            "2026-01-01T00:00:00+00:00",
+            3,
+        ),
+    )
+    rows = [
+        (
+            "bank-software",
+            "2026-01-05",
+            "POS SOFTWARE SUBSCRIPTION",
+            "pos software subscription",
+            -5_000,
+            None,
+        ),
+        (
+            "bank-uncategorized",
+            "2026-01-06",
+            "MYSTERY PAYMENT",
+            "mystery payment",
+            -1_234,
+            "dup-fingerprint-demo",
+        ),
+        (
+            "bank-correction",
+            "2026-01-07",
+            "POS SOFTWARE SUBSCRIPTION",
+            "pos software subscription",
+            -7_500,
+            None,
+        ),
+    ]
+    for index, row in enumerate(rows, start=1):
+        connection.execute(
+            """
+            INSERT INTO bank_transactions (
+                bank_transaction_id,
+                import_id,
+                transaction_date,
+                posted_date,
+                description_raw,
+                description_normalized,
+                amount_cents,
+                external_id,
+                check_number,
+                row_hash,
+                duplicate_group_id,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row[0],
+                "import-categorization",
+                row[1],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                f"CAT-{index}",
+                None,
+                f"row-hash-cat-{index}",
+                row[5],
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+    connection.commit()
+
+
+def _insert_demo_category_correction(
+    connection: sqlite3.Connection,
+) -> None:
+    _insert_category_corrections_table(connection)
+    connection.execute(
+        """
+        INSERT INTO category_corrections (
+            correction_id,
+            bank_transaction_id,
+            corrected_category,
+            corrected_by,
+            reason,
+            corrected_at,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "corr-demo",
+            "bank-correction",
+            "Office Supplies",
+            "tester",
+            "Manual review correction",
+            "2026-01-08T00:00:00+00:00",
+            "2026-01-08T00:00:00+00:00",
+        ),
+    )
+    connection.commit()
+
+
+def test_parse_explanation_json_handles_valid_and_invalid_json() -> None:
+    exact = parse_explanation_json(
+        json.dumps(
+            {
+                "match_type": "exact",
+                "status": "auto_matched",
+                "reason": "Exact amount and date match",
+            }
+        )
+    )
+    malformed = parse_explanation_json("{not-json")
+    blank = parse_explanation_json(None)
+
+    assert exact["valid"] is True
+    assert exact["summary"] == "Exact amount and date match"
+    assert malformed["valid"] is False
+    assert malformed["summary"] == "Invalid explanation JSON"
+    assert blank["summary"] == "No explanation JSON"
+
+
+def test_parse_explanation_json_tolerates_score_and_split_shapes() -> None:
+    payload = {
+        "score_components": {
+            "amount_score": 100.0,
+            "date_score": 95.0,
+            "description_score": 80.0,
+            "duplicate_penalty": 0.0,
+            "split_penalty": 5.0,
+        },
+        "component_details": [
+            {"journal_entry_id": "je-1", "amount_cents": 1_000},
+        ],
+        "decision_reason": "Split candidate accepted",
+    }
+
+    parsed = parse_explanation_json(json.dumps(payload))
+
+    assert parsed["valid"] is True
+    assert parsed["score_components"]["amount_score"] == 100.0
+    assert parsed["split_components"] == payload["component_details"]
+    assert parsed["decision_reason"] == "Split candidate accepted"
+
+
+def test_reconciliation_missing_database_returns_friendly_empty_data(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "missing.db"
+
+    review = load_reconciliation_review(db_path)
+
+    assert load_reconciliation_runs(db_path) == []
+    assert review["available"] is False
+    assert review["matches"] == []
+    assert load_reconciliation_match_details(db_path, "match-missing") is None
+
+
+def test_reconciliation_empty_schema_returns_no_runs_or_matches(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "empty.db"
+    connection = _initialize_test_database(db_path)
+    connection.close()
+
+    review = load_reconciliation_review(db_path)
+
+    assert load_reconciliation_runs(db_path) == []
+    assert review["available"] is True
+    assert review["matches"] == []
+
+
+def test_reconciliation_runs_load_in_deterministic_order(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "demo.db"
+    _create_demo_database(db_path)
+    connection = connect(db_path)
+    connection.execute(
+        """
+        INSERT INTO reconciliation_runs (
+            reconciliation_run_id,
+            cash_account_id,
+            statement_start_date,
+            statement_end_date,
+            started_at,
+            completed_at,
+            status,
+            config_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "recon-later",
+            "acct-cash",
+            "2026-01-01",
+            "2026-01-31",
+            "2026-02-01T00:00:00+00:00",
+            "2026-02-01T00:00:01+00:00",
+            "completed",
+            json.dumps({"mode": "fuzzy"}),
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    runs = load_reconciliation_runs(db_path)
+
+    assert [run["reconciliation_run_id"] for run in runs] == [
+        "recon-later",
+        "recon-demo",
+    ]
+    assert runs[0]["config"] == {"mode": "fuzzy"}
+
+
+def test_reconciliation_review_loads_match_rows_and_links(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "demo.db"
+    _create_demo_database(db_path)
+
+    review = load_reconciliation_review(db_path, "recon-demo")
+    match = review["matches"][0]
+
+    assert review["available"] is True
+    assert match["bank_transaction_id"] == "bank-demo"
+    assert match["bank_transaction_date"] == "2026-01-01"
+    assert match["bank_description_raw"] == "DEPOSIT OWNER CONTRIBUTION"
+    assert match["match_type"] == "exact"
+    assert match["match_status"] == "auto_matched"
+    assert match["score"] == 100.0
+    assert match["amount_delta_cents"] == 0
+    assert match["date_delta_days"] == 0
+    assert match["ledger_link_count"] == 1
+    assert match["matched_ledger_journal_entry_ids"] == [
+        "je-owner-contribution"
+    ]
+    assert match["matched_ledger_journal_line_ids"] == [
+        "line-owner-contribution-cash"
+    ]
+
+
+def test_reconciliation_match_details_loads_ledger_detail(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "demo.db"
+    _create_demo_database(db_path)
+
+    details = load_reconciliation_match_details(db_path, "match-demo")
+
+    assert details is not None
+    assert details["ledger_link_count"] == 1
+    assert details["ledger_links"][0]["journal_entry_id"] == (
+        "je-owner-contribution"
+    )
+    assert details["ledger_links"][0]["journal_entry_date"] == "2026-01-01"
+    assert details["ledger_links"][0]["account_code"] == "1000"
+
+
+def test_reconciliation_helper_output_is_json_serializable(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "demo.db"
+    _create_demo_database(db_path)
+
+    payload = {
+        "runs": load_reconciliation_runs(db_path),
+        "review": load_reconciliation_review(db_path),
+        "details": load_reconciliation_match_details(db_path, "match-demo"),
+    }
+
+    json.dumps(payload)
+
+
+def test_reconciliation_helpers_do_not_mutate_database(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "demo.db"
+    _create_demo_database(db_path)
+    connection = connect(db_path)
+    before_events = connection.execute(
+        "SELECT COUNT(*) FROM ledger_events"
+    ).fetchone()[0]
+    before_bank_rows = connection.execute(
+        "SELECT COUNT(*) FROM bank_transactions"
+    ).fetchone()[0]
+    before_runs = connection.execute(
+        "SELECT COUNT(*) FROM reconciliation_runs"
+    ).fetchone()[0]
+    before_matches = connection.execute(
+        "SELECT COUNT(*) FROM reconciliation_matches"
+    ).fetchone()[0]
+
+    load_reconciliation_runs(db_path)
+    load_reconciliation_review(db_path)
+    load_reconciliation_match_details(db_path, "match-demo")
+
+    after_events = connection.execute(
+        "SELECT COUNT(*) FROM ledger_events"
+    ).fetchone()[0]
+    after_bank_rows = connection.execute(
+        "SELECT COUNT(*) FROM bank_transactions"
+    ).fetchone()[0]
+    after_runs = connection.execute(
+        "SELECT COUNT(*) FROM reconciliation_runs"
+    ).fetchone()[0]
+    after_matches = connection.execute(
+        "SELECT COUNT(*) FROM reconciliation_matches"
+    ).fetchone()[0]
+    connection.close()
+
+    assert after_events == before_events
+    assert after_bank_rows == before_bank_rows
+    assert after_runs == before_runs
+    assert after_matches == before_matches
+
+
+def test_categorization_missing_database_returns_friendly_empty_data(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "missing.db"
+
+    review = load_categorization_review(db_path)
+
+    assert review["available"] is False
+    assert review["rows"] == []
+    assert load_categorization_review_rows(db_path) == []
+    assert load_category_correction_summary(db_path)["correction_count"] == 0
+
+
+def test_categorization_empty_schema_returns_no_rows(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "empty.db"
+    connection = _initialize_test_database(db_path)
+    connection.close()
+
+    review = load_categorization_review(db_path)
+
+    assert review["available"] is True
+    assert review["rows"] == []
+    assert review["summary"]["total_bank_transactions"] == 0
+
+
+def test_categorization_review_shows_rules_corrections_and_unknowns(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "categories.db"
+    connection = _initialize_test_database(db_path)
+    _insert_categorization_review_bank_rows(connection)
+    _insert_demo_category_correction(connection)
+    connection.close()
+
+    rows = load_categorization_review_rows(db_path)
+    by_id = {row["bank_transaction_id"]: row for row in rows}
+
+    assert by_id["bank-software"]["category"] == "Software"
+    assert by_id["bank-software"]["category_source"] == "rule"
+    assert by_id["bank-software"]["category_rule_id"]
+    assert by_id["bank-correction"]["category"] == "Office Supplies"
+    assert by_id["bank-correction"]["category_source"] == "correction"
+    assert by_id["bank-correction"]["correction_id"] == "corr-demo"
+    assert by_id["bank-uncategorized"]["category"] is None
+    assert by_id["bank-uncategorized"]["duplicate_group_id"] == (
+        "dup-fingerprint-demo"
+    )
+
+
+def test_categorization_summary_counts_review_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "categories.db"
+    connection = _initialize_test_database(db_path)
+    _insert_categorization_review_bank_rows(connection)
+    _insert_demo_category_correction(connection)
+    connection.close()
+
+    review = load_categorization_review(db_path)
+    summary = review["summary"]
+
+    assert summary["total_bank_transactions"] == 3
+    assert summary["categorized_count"] == 2
+    assert summary["uncategorized_count"] == 1
+    assert summary["rule_based_count"] == 1
+    assert summary["correction_based_count"] == 1
+    assert summary["classifier_based_count"] == 0
+    assert summary["duplicate_flagged_count"] == 1
+    assert summary["classifier_used"] is False
+
+
+def test_categorization_handles_missing_correction_table_gracefully(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "categories.db"
+    connection = _initialize_test_database(db_path)
+    _insert_categorization_review_bank_rows(connection)
+    connection.close()
+
+    rows = load_categorization_review_rows(db_path)
+    correction_summary = load_category_correction_summary(db_path)
+
+    assert rows
+    assert correction_summary["correction_table_exists"] is False
+    assert correction_summary["correction_count"] == 0
+
+
+def test_categorization_helper_output_is_json_serializable(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "categories.db"
+    connection = _initialize_test_database(db_path)
+    _insert_categorization_review_bank_rows(connection)
+    _insert_demo_category_correction(connection)
+    connection.close()
+
+    payload = {
+        "review": load_categorization_review(db_path),
+        "rows": load_categorization_review_rows(db_path),
+        "corrections": load_category_correction_summary(db_path),
+    }
+
+    json.dumps(payload)
+
+
+def test_categorization_helpers_do_not_mutate_or_write_files(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "categories.db"
+    connection = _initialize_test_database(db_path)
+    _insert_categorization_review_bank_rows(connection)
+    _insert_demo_category_correction(connection)
+    before_events = connection.execute(
+        "SELECT COUNT(*) FROM ledger_events"
+    ).fetchone()[0]
+    before_bank_rows = connection.execute(
+        "SELECT COUNT(*) FROM bank_transactions"
+    ).fetchone()[0]
+    before_corrections = connection.execute(
+        "SELECT COUNT(*) FROM category_corrections"
+    ).fetchone()[0]
+
+    load_categorization_review(db_path)
+    load_categorization_review_rows(db_path)
+    load_category_correction_summary(db_path)
+
+    after_events = connection.execute(
+        "SELECT COUNT(*) FROM ledger_events"
+    ).fetchone()[0]
+    after_bank_rows = connection.execute(
+        "SELECT COUNT(*) FROM bank_transactions"
+    ).fetchone()[0]
+    after_corrections = connection.execute(
+        "SELECT COUNT(*) FROM category_corrections"
+    ).fetchone()[0]
+    connection.close()
+
+    assert after_events == before_events
+    assert after_bank_rows == before_bank_rows
+    assert after_corrections == before_corrections
+    assert not (tmp_path / "exports").exists()
+    assert list(tmp_path.glob("*.pkl")) == []
+    assert list(tmp_path.glob("*.joblib")) == []

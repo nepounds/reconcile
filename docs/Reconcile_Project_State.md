@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 27 — Add dashboard report pages and event timeline.
+Current step: Step 28 — Add dashboard reconciliation and categorization review.
 
-Status: Step 27 complete.
+Status: Step 28 complete.
 
-Approximate project completion: 90% to 92%.
+Approximate project completion: 93% to 95%.
 
 Current summary:
 
@@ -132,6 +132,14 @@ Current summary:
 * Step 27 added compact payload inspection for ledger events in Streamlit expanders.
 * Step 27 preserved the known accounting refinement note that customer collections through Accounts Receivable should classify as operating cash flow, not investing.
 * Step 27 expanded dashboard helper tests for report loaders, date validation, event timeline loading, JSON-serializable helper data, and read-only safety.
+* Step 28 added read-only Streamlit dashboard pages for Bank Reconciliation and Categorization Review.
+* Step 28 added reconciliation review helpers for runs, matches, explanation JSON, match details, and ledger links.
+* Step 28 displays reconciliation match status, score, amount/date deltas, explanation summaries, and linked journal details.
+* Step 28 added categorization review helpers for imported bank transactions, rule-based categories, latest corrections, duplicate groups, and summary metrics.
+* Step 28 keeps categorization classifier use optional and does not train or persist dashboard models.
+* Step 28 preserves all dashboard behavior from Steps 26 and 27 while expanding navigation.
+* Step 28 dashboard helpers remain read-only and do not append events, run reconciliation, import bank files, record corrections, rebuild projections, or write export/model files.
+* Step 28 expanded dashboard helper tests for reconciliation review, explanation parsing, categorization review, empty states, JSON serialization, and mutation safety.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -222,6 +230,61 @@ python -m ruff check .                              # passed locally as reported
 python -m pytest                                    # passed locally as reported
 streamlit run dashboard/streamlit_app.py            # dashboard launched; all Step 27 pages showed no errors in manual smoke check
 git status                                          # initially showed dashboard/streamlit_app.py only before test and Project State updates
+```
+
+Completed Step 28 files:
+
+```text
+dashboard/streamlit_app.py
+tests/test_streamlit_dashboard.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 28 summary:
+
+* Expanded `dashboard/streamlit_app.py` navigation with Bank Reconciliation and Categorization Review pages.
+* Preserved Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline pages.
+* Preserved the default dashboard database path of `exports/reconcile.db`.
+* Preserved graceful missing-database setup instructions.
+* Added `load_reconciliation_runs` for deterministic newest-first reconciliation run review.
+* Added `load_reconciliation_review` for selected-run match review without running reconciliation.
+* Added `load_reconciliation_match_details` for inspecting one match and its linked ledger movements.
+* Added `parse_explanation_json` to tolerate valid, missing, malformed, fuzzy, exact, and split explanation shapes.
+* Added ledger-link detail loading for journal entry IDs, journal line IDs, signed amount cents, entry dates, entry descriptions, and account code/name when available.
+* Added readable reconciliation match display fields for bank transaction date, raw description, normalized description, bank amount, match type, status, score, deltas, ledger-link count, matched entry IDs, matched line IDs, and explanation summary.
+* Added Streamlit expanders for reconciliation run configuration, explanation JSON, and linked ledger movements.
+* Added `load_categorization_review_rows` for read-only category review of imported bank transactions.
+* Added `load_categorization_review` with summary metrics for total, categorized, uncategorized, rule-based, correction-based, classifier-based, and duplicate-flagged rows.
+* Added `load_category_correction_summary` with graceful behavior when `category_corrections` does not exist.
+* Applied existing default rule-based categorization for dashboard review.
+* Applied latest category corrections when the optional correction table exists.
+* Preserved raw and normalized bank descriptions in categorization review rows.
+* Preserved duplicate group IDs in categorization review rows.
+* Clearly surfaced category, source, rule ID, reason, correction ID, correction reason, corrected timestamp, and classifier confidence fields.
+* Skipped classifier training in the dashboard review because rule and correction review was sufficient for Step 28 and avoids model persistence risk.
+* Kept the dashboard read-only.
+* Did not add writeback buttons, correction recording, match confirmation/rejection, rebuild buttons, bank import buttons, reconciliation run buttons, classifier training buttons, export generation, CI, deployment, screenshots, README polish, or new engine behavior.
+* Updated `tests/test_streamlit_dashboard.py` with Step 28 helper coverage.
+* Tested dashboard module import safety and expanded page constants.
+* Tested reconciliation empty states, run ordering, match row loading, ledger-link aggregation, match details, explanation parsing, JSON serialization, and mutation safety.
+* Tested categorization empty states, rule-based rows, correction overrides, uncategorized rows, duplicate group preservation, summary counts, missing correction table behavior, JSON serialization, and mutation safety.
+* Confirmed helper code does not append ledger events, mutate bank transactions, mutate reconciliation tables, mutate category corrections, run reconciliation, import bank files, or write export/model files in the added tests.
+
+Commands run for Step 28:
+
+```bash
+python -m py_compile /mnt/data/streamlit_app.py /mnt/data/test_streamlit_dashboard.py
+```
+
+Results:
+
+```text
+python -m py_compile /mnt/data/streamlit_app.py /mnt/data/test_streamlit_dashboard.py  # passed
+python -m pytest tests/test_streamlit_dashboard.py  # not run in sandbox; requires full local repo package
+python -m pytest                                    # not run in sandbox; requires full local repo package
+python -m ruff check .                              # not run in sandbox; ruff unavailable here
+streamlit run dashboard/streamlit_app.py            # not run in sandbox; run locally for manual smoke check
+git status                                          # not run in sandbox; run locally in the repository
 ```
 
 Completed Step 18 files:
@@ -891,9 +954,9 @@ git status                                      # expected Step 26 files shown
 
 Next planned step:
 
-Step 28 — Add dashboard reconciliation and categorization review.
+Step 29 — Add CI workflow.
 
-Step 28 status: Not started.
+Step 29 status: Not started.
 
 ---
 
