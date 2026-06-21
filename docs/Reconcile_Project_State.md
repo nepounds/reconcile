@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 28 — Add dashboard reconciliation and categorization review.
+Current step: Step 29 — Add CI workflow.
 
-Status: Step 28 complete.
+Status: Step 29 complete.
 
-Approximate project completion: 93% to 95%.
+Approximate project completion: 95% to 97%.
 
 Current summary:
 
@@ -140,6 +140,11 @@ Current summary:
 * Step 28 preserves all dashboard behavior from Steps 26 and 27 while expanding navigation.
 * Step 28 dashboard helpers remain read-only and do not append events, run reconciliation, import bank files, record corrections, rebuild projections, or write export/model files.
 * Step 28 expanded dashboard helper tests for reconciliation review, explanation parsing, categorization review, empty states, JSON serialization, and mutation safety.
+* Step 29 added GitHub Actions CI at `.github/workflows/ci.yml`.
+* Step 29 CI runs on pushes and pull requests.
+* Step 29 CI checks out the repository, sets up Python 3.13, installs the package with dev dependencies, runs Ruff, and runs the full pytest suite.
+* Step 29 keeps CI simple with no matrix, deployment, caching, Streamlit launch job, coverage service, mypy, pre-commit, Docker, secrets, or local database requirement.
+* Step 29 left the README badge for Step 30 README polish.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -952,11 +957,63 @@ streamlit run dashboard/streamlit_app.py        # launched locally; stopped from
 git status                                      # expected Step 26 files shown
 ```
 
+Completed Step 29 files:
+
+```text
+.github/workflows/ci.yml
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 29 summary:
+
+* Added `.github/workflows/ci.yml`.
+* Added a GitHub Actions workflow named `CI`.
+* Configured CI to run on `push`.
+* Configured CI to run on `pull_request`.
+* Configured CI to run on `ubuntu-latest`.
+* Used `actions/checkout@v4`.
+* Used `actions/setup-python@v5`.
+* Used Python `3.13` for stable GitHub Actions compatibility.
+* Installed the project from `pyproject.toml` using editable install with dev extras.
+* Ran `python -m ruff check .` before tests.
+* Ran the full test suite with `python -m pytest`.
+* Validated the workflow file is present and readable.
+* Kept CI simple and readable.
+* Did not add dependency caching, OS matrices, deployment, Streamlit launch checks, coverage services, mypy, pre-commit, Docker, new tests, new dependencies, or app behavior changes.
+* Did not add the README CI badge in Step 29; the reference-style badge is deferred to Step 30 README polish.
+* Did not commit a local SQLite database or generated private/local artifacts.
+* Local validation passed as reported.
+* GitHub Actions validation is pending until the branch is pushed and the Actions tab confirms the workflow passes.
+
+Commands run for Step 29:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+python -c "from pathlib import Path; print(Path('.github/workflows/ci.yml').read_text())"
+```
+
+Results:
+
+```text
+python -m pytest        # passed locally as reported
+python -m ruff check .  # All checks passed locally as reported
+git status              # expected Step 29 files only as reported
+workflow YAML readback  # printed `.github/workflows/ci.yml` successfully
+```
+
+GitHub Actions result:
+
+```text
+Pending until pushed and checked in GitHub Actions.
+```
+
 Next planned step:
 
-Step 29 — Add CI workflow.
+Step 30 — Polish README and architecture docs.
 
-Step 29 status: Not started.
+Step 30 status: Not started.
 
 ---
 
@@ -5906,43 +5963,72 @@ Add Streamlit reports and event timeline
 
 ### Step 28 — Add dashboard reconciliation and categorization review
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Add review screens for reconciliation matches and categorization decisions.
+* Add read-only Streamlit review screens for reconciliation matches and categorization decisions.
 
-Expected work:
+Completed work:
 
-* Show bank transactions.
-* Show matched ledger movements.
-* Show match status.
-* Show match score and explanation.
-* Show ambiguous candidates.
-* Show category source/reason.
-* Allow review-friendly display.
-* Manual confirmation may be read-only or interactive depending on scope at this step.
+* Expanded `dashboard/streamlit_app.py` navigation with Bank Reconciliation and Categorization Review pages.
+* Preserved Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline pages.
+* Preserved the default dashboard database path of `exports/reconcile.db`.
+* Preserved graceful missing-database setup instructions.
+* Added `load_reconciliation_runs` for deterministic newest-first reconciliation run review.
+* Added `load_reconciliation_review` for selected-run match review without running reconciliation.
+* Added `load_reconciliation_match_details` for inspecting one match and its linked ledger movements.
+* Added `parse_explanation_json` to tolerate valid, missing, malformed, fuzzy, exact, and split explanation shapes.
+* Added ledger-link detail loading for journal entry IDs, journal line IDs, signed amount cents, entry dates, entry descriptions, and account code/name when available.
+* Added readable reconciliation match display fields for bank transaction date, raw description, normalized description, bank amount, match type, status, score, deltas, ledger-link count, matched entry IDs, matched line IDs, and explanation summary.
+* Added Streamlit expanders for reconciliation run configuration, explanation JSON, and linked ledger movements.
+* Added `load_categorization_review_rows` for read-only category review of imported bank transactions.
+* Added `load_categorization_review` with summary metrics for total, categorized, uncategorized, rule-based, correction-based, classifier-based, and duplicate-flagged rows.
+* Added `load_category_correction_summary` with graceful behavior when `category_corrections` does not exist.
+* Applied existing default rule-based categorization for dashboard review.
+* Applied latest category corrections when the optional correction table exists.
+* Preserved raw and normalized bank descriptions in categorization review rows.
+* Preserved duplicate group IDs in categorization review rows.
+* Clearly surfaced category, source, rule ID, reason, correction ID, correction reason, corrected timestamp, and classifier confidence fields.
+* Skipped classifier training in the dashboard review because rule and correction review was sufficient for Step 28 and avoids model persistence risk.
+* Kept the dashboard read-only.
+* Did not add writeback buttons, correction recording, match confirmation/rejection, rebuild buttons, bank import buttons, reconciliation run buttons, classifier training buttons, export generation, CI, deployment, screenshots, README polish, or new engine behavior.
+* Updated `tests/test_streamlit_dashboard.py` with Step 28 helper coverage.
+* Tested dashboard module import safety and expanded page constants.
+* Tested reconciliation empty states, run ordering, match row loading, ledger-link aggregation, match details, explanation parsing, JSON serialization, and mutation safety.
+* Tested categorization empty states, rule-based rows, correction overrides, uncategorized rows, duplicate group preservation, summary counts, missing correction table behavior, JSON serialization, and mutation safety.
+* Confirmed helper code does not append ledger events, mutate bank transactions, mutate reconciliation tables, mutate category corrections, run reconciliation, import bank files, or write export/model files in the added tests.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 dashboard/streamlit_app.py
+tests/test_streamlit_dashboard.py
 docs/Reconcile_Project_State.md
-README.md
 ```
 
-Do not implement yet:
-
-* Production user workflow
-* Auth
-* Real bank APIs
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
+python -m ruff check dashboard/streamlit_app.py
+python -m ruff check tests/test_streamlit_dashboard.py
+python -m pytest tests/test_streamlit_dashboard.py
 python -m ruff check .
+python -m pytest
 streamlit run dashboard/streamlit_app.py
+git status
+```
+
+Results:
+
+```text
+python -m ruff check dashboard/streamlit_app.py       # passed locally as reported
+python -m ruff check tests/test_streamlit_dashboard.py # passed locally as reported
+python -m pytest tests/test_streamlit_dashboard.py    # passed locally as reported
+python -m ruff check .                               # passed locally as reported
+python -m pytest                                     # passed locally as reported
+streamlit run dashboard/streamlit_app.py             # manual smoke passed as reported
+git status                                           # expected Step 28 files after Project State update
 ```
 
 Definition of done:
@@ -5950,8 +6036,12 @@ Definition of done:
 * Reconciliation results are reviewable.
 * Match explanations are visible.
 * Categorization decisions are visible.
-* Tests pass.
-* Ruff passes.
+* Dashboard remains read-only.
+* No writeback behavior was added.
+* No engine behavior changed.
+* Tests pass locally as reported.
+* Ruff passes locally as reported.
+* Project State is updated.
 
 Suggested commit message:
 
@@ -5963,46 +6053,85 @@ Add Streamlit reconciliation and categorization review
 
 ### Step 29 — Add CI workflow
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Add GitHub Actions for automated tests and linting.
 
-Expected work:
+Completed work:
 
-* Add CI workflow.
-* Run pytest.
-* Run ruff.
-* Confirm GitHub Actions passes.
+* Added `.github/workflows/ci.yml`.
+* Added a GitHub Actions workflow named `CI`.
+* Configured CI to run on `push`.
+* Configured CI to run on `pull_request`.
+* Configured CI to run on `ubuntu-latest`.
+* Used `actions/checkout@v4`.
+* Used `actions/setup-python@v5`.
+* Used Python `3.13` for stable GitHub Actions compatibility.
+* Installed the project from `pyproject.toml` using editable install with dev extras.
+* Ran Ruff with `python -m ruff check .`.
+* Ran the full pytest suite with `python -m pytest`.
+* Validated the workflow YAML by reading `.github/workflows/ci.yml` from disk.
+* Kept CI simple and readable.
+* Did not add fragile caching.
+* Did not add OS matrices.
+* Did not add deployment jobs.
+* Did not add Streamlit launch jobs.
+* Did not add coverage services, mypy, pre-commit, Docker, new tests, new dependencies, or app behavior changes.
+* Did not add the README CI badge in Step 29; the reference-style badge is deferred to Step 30 README polish.
+* Did not commit a local SQLite database or generated private/local artifacts.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 .github/workflows/ci.yml
 docs/Reconcile_Project_State.md
-README.md
 ```
 
-Do not implement yet:
-
-* Deployment automation
-* Production hosting
-
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
+git status
+python -c "from pathlib import Path; print(Path('.github/workflows/ci.yml').read_text())"
+```
+
+Results:
+
+```text
+python -m pytest        # passed locally as reported
+python -m ruff check .  # All checks passed locally as reported
+git status              # expected Step 29 files only as reported
+workflow YAML readback  # printed `.github/workflows/ci.yml` successfully
+```
+
+GitHub Actions result:
+
+```text
+Pending until pushed and checked in GitHub Actions.
 ```
 
 Definition of done:
 
-* CI file exists.
-* CI runs tests and linting.
-* Local tests pass.
-* Local ruff passes.
-* GitHub Actions passes.
+* `.github/workflows/ci.yml` exists.
+* CI runs on push.
+* CI runs on pull request.
+* CI checks out the repository.
+* CI sets up Python.
+* CI installs the package with dev dependencies.
+* CI runs Ruff.
+* CI runs pytest.
+* Local pytest passes.
+* Local Ruff passes.
+* Workflow YAML readback passes.
+* No application behavior changed.
+* No dashboard behavior changed.
+* No engine behavior changed.
+* Project State is updated.
+* Git status only shows expected Step 29 files.
+* GitHub Actions pass remains to be confirmed after push.
 
 Suggested commit message:
 
@@ -6023,6 +6152,7 @@ Goal:
 Expected work:
 
 * Polish README quickstart.
+* Add the reference-style GitHub Actions CI badge under the main README heading.
 * Add architecture overview.
 * Add event model explanation.
 * Add accounting invariant explanation.
