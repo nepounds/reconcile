@@ -26,6 +26,7 @@ from reconcile.reconciliation.matcher import (
     run_split_reconciliation,
 )
 from reconcile.reports.balance_sheet import generate_balance_sheet
+from reconcile.reports.cash_flow import generate_cash_flow_statement
 from reconcile.reports.export import export_all_reports
 from reconcile.reports.income_statement import (
     generate_income_statement,
@@ -122,6 +123,16 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_db_path(balance_sheet)
     balance_sheet.add_argument("--as-of", dest="as_of_date", required=True)
     balance_sheet.set_defaults(handler=_handle_report_balance_sheet)
+
+    cash_flow = report_subparsers.add_parser(
+        "cash-flow",
+        help="Print direct-method cash flow totals.",
+    )
+    _add_db_path(cash_flow)
+    cash_flow.add_argument("--from", dest="from_date", required=True)
+    cash_flow.add_argument("--to", dest="to_date", required=True)
+    cash_flow.add_argument("--cash-account-id")
+    cash_flow.set_defaults(handler=_handle_report_cash_flow)
 
     import_bank = subparsers.add_parser(
         "import-bank",
@@ -245,6 +256,7 @@ def _handle_export_reports(args: argparse.Namespace) -> int:
     _print_export_summary("trial_balance", summary["trial_balance"])
     _print_export_summary("income_statement", summary["income_statement"])
     _print_export_summary("balance_sheet", summary["balance_sheet"])
+    _print_export_summary("cash_flow", summary["cash_flow"])
 
     reconciliation_summary = summary["reconciliation_results"]
     if isinstance(reconciliation_summary, dict) and reconciliation_summary.get(
@@ -376,6 +388,40 @@ def _handle_report_balance_sheet(args: argparse.Namespace) -> int:
                 )
             )
 
+    return 0
+
+
+def _handle_report_cash_flow(args: argparse.Namespace) -> int:
+    start_date = _parse_iso_date(args.from_date)
+    end_date = _parse_iso_date(args.to_date)
+
+    with _connection(args.db_path) as connection:
+        statement = generate_cash_flow_statement(
+            connection,
+            start_date=start_date,
+            end_date=end_date,
+            cash_account_id=args.cash_account_id,
+        )
+
+    totals = statement["totals"]
+
+    print(f"Cash Flow Statement: {start_date.isoformat()} to {end_date.isoformat()}")
+    print(
+        "Operating cash flow: "
+        f"{format_cents(totals['operating_cash_flow_cents'])}"
+    )
+    print(
+        "Investing cash flow: "
+        f"{format_cents(totals['investing_cash_flow_cents'])}"
+    )
+    print(
+        "Financing cash flow: "
+        f"{format_cents(totals['financing_cash_flow_cents'])}"
+    )
+    print(f"Net cash change: {format_cents(totals['net_cash_change_cents'])}")
+    print(f"Beginning cash: {format_cents(totals['beginning_cash_cents'])}")
+    print(f"Ending cash: {format_cents(totals['ending_cash_cents'])}")
+    print(f"Cash balances tie: {totals['cash_balances_tie']}")
     return 0
 
 

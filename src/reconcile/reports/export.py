@@ -9,6 +9,10 @@ from pathlib import Path
 
 from reconcile.exceptions import ValidationError
 from reconcile.reports.balance_sheet import generate_balance_sheet
+from reconcile.reports.cash_flow import (
+    cash_flow_totals,
+    generate_cash_flow_statement,
+)
 from reconcile.reports.income_statement import generate_income_statement
 from reconcile.reports.trial_balance import (
     generate_trial_balance,
@@ -18,6 +22,7 @@ from reconcile.reports.trial_balance import (
 TRIAL_BALANCE_FILENAME = "trial_balance.csv"
 INCOME_STATEMENT_FILENAME = "income_statement.csv"
 BALANCE_SHEET_FILENAME = "balance_sheet.csv"
+CASH_FLOW_FILENAME = "cash_flow.csv"
 RECONCILIATION_RESULTS_FILENAME = "reconciliation_results.csv"
 
 TRIAL_BALANCE_COLUMNS = [
@@ -68,6 +73,28 @@ RECONCILIATION_RESULTS_COLUMNS = [
     "ledger_line_ids",
     "ledger_amount_cents",
     "explanation_json",
+]
+
+CASH_FLOW_COLUMNS = [
+    "section",
+    "journal_entry_id",
+    "entry_date",
+    "description",
+    "cash_account_id",
+    "cash_account_code",
+    "cash_account_name",
+    "cash_line_id",
+    "cash_side",
+    "cash_amount_cents",
+    "cash_flow_amount_cents",
+    "counterparty_account_id",
+    "counterparty_account_code",
+    "counterparty_account_name",
+    "counterparty_account_type",
+    "counterparty_line_id",
+    "counterparty_side",
+    "counterparty_amount_cents",
+    "classification_reason",
 ]
 
 
@@ -256,6 +283,12 @@ def export_all_reports(
         as_of_date=balance_sheet_as_of_date,
         output_path=directory / BALANCE_SHEET_FILENAME,
     )
+    cash_flow = export_cash_flow_csv(
+        connection,
+        start_date=income_start_date,
+        end_date=income_end_date,
+        output_path=directory / CASH_FLOW_FILENAME,
+    )
 
     if reconciliation_run_id is None:
         reconciliation_results: dict[str, object] = {
@@ -277,7 +310,53 @@ def export_all_reports(
         "trial_balance": trial_balance,
         "income_statement": income_statement,
         "balance_sheet": balance_sheet,
+        "cash_flow": cash_flow,
         "reconciliation_results": reconciliation_results,
+    }
+
+
+def export_cash_flow_csv(
+    connection: sqlite3.Connection,
+    *,
+    start_date: date,
+    end_date: date,
+    output_path: str | Path,
+    cash_account_id: str | None = None,
+) -> dict[str, object]:
+    """Export direct-method cash flow section rows to a CSV file."""
+    statement = generate_cash_flow_statement(
+        connection,
+        start_date=start_date,
+        end_date=end_date,
+        cash_account_id=cash_account_id,
+    )
+
+    sections = statement["sections"]
+    if not isinstance(sections, dict):
+        raise ValidationError("Cash flow statement sections are malformed.")
+
+    rows: list[dict[str, object]] = []
+    for section in ("operating", "investing", "financing"):
+        section_rows = sections.get(section, [])
+        if not isinstance(section_rows, list):
+            raise ValidationError(f"Cash flow section is malformed: {section}.")
+        rows.extend(section_rows)
+
+    path = _write_csv(output_path, CASH_FLOW_COLUMNS, rows)
+    totals = cash_flow_totals(statement)
+
+    return {
+        "output_path": str(path),
+        "row_count": len(rows),
+        "start_date": statement["start_date"],
+        "end_date": statement["end_date"],
+        "operating_cash_flow_cents": totals["operating_cash_flow_cents"],
+        "investing_cash_flow_cents": totals["investing_cash_flow_cents"],
+        "financing_cash_flow_cents": totals["financing_cash_flow_cents"],
+        "net_cash_change_cents": totals["net_cash_change_cents"],
+        "beginning_cash_cents": totals["beginning_cash_cents"],
+        "ending_cash_cents": totals["ending_cash_cents"],
+        "cash_balances_tie": totals["cash_balances_tie"],
     }
 
 

@@ -12,11 +12,13 @@ from reconcile.db import connect
 from reconcile.exceptions import ValidationError
 from reconcile.reports.export import (
     BALANCE_SHEET_COLUMNS,
+    CASH_FLOW_COLUMNS,
     INCOME_STATEMENT_COLUMNS,
     RECONCILIATION_RESULTS_COLUMNS,
     TRIAL_BALANCE_COLUMNS,
     export_all_reports,
     export_balance_sheet_csv,
+    export_cash_flow_csv,
     export_income_statement_csv,
     export_reconciliation_results_csv,
     export_trial_balance_csv,
@@ -232,6 +234,39 @@ def test_balance_sheet_export_invalid_as_of_date_raises(
             )
 
 
+def test_cash_flow_export_writes_expected_csv_and_summary(
+    tmp_path: Path,
+) -> None:
+    db_path = _seeded_db(tmp_path)
+    output_path = tmp_path / "cash_flow.csv"
+
+    with connect(db_path) as connection:
+        before_counts = _projection_counts(connection)
+        summary = export_cash_flow_csv(
+            connection,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+            output_path=output_path,
+        )
+        after_counts = _projection_counts(connection)
+
+    assert output_path.exists()
+    assert _csv_header(output_path) == CASH_FLOW_COLUMNS
+
+    rows = _read_csv(output_path)
+    assert summary["row_count"] == len(rows)
+    assert summary["start_date"] == "2026-01-01"
+    assert summary["end_date"] == "2026-01-31"
+    assert "operating_cash_flow_cents" in summary
+    assert "investing_cash_flow_cents" in summary
+    assert "financing_cash_flow_cents" in summary
+    assert "net_cash_change_cents" in summary
+    assert "beginning_cash_cents" in summary
+    assert "ending_cash_cents" in summary
+    assert summary["cash_balances_tie"] is True
+    assert before_counts == after_counts
+
+
 def test_reconciliation_export_writes_bank_match_and_link_fields(
     tmp_path: Path,
 ) -> None:
@@ -307,7 +342,12 @@ def test_export_all_reports_skips_reconciliation_without_run_id(
     assert (output_dir / "trial_balance.csv").exists()
     assert (output_dir / "income_statement.csv").exists()
     assert (output_dir / "balance_sheet.csv").exists()
+    assert (output_dir / "cash_flow.csv").exists()
     assert not (output_dir / "reconciliation_results.csv").exists()
+
+    cash_flow_summary = summary["cash_flow"]
+    assert isinstance(cash_flow_summary, dict)
+    assert cash_flow_summary["cash_balances_tie"] is True
 
     reconciliation_summary = summary["reconciliation_results"]
     assert isinstance(reconciliation_summary, dict)
@@ -334,6 +374,7 @@ def test_export_all_reports_writes_reconciliation_when_run_id_is_provided(
     assert (output_dir / "trial_balance.csv").exists()
     assert (output_dir / "income_statement.csv").exists()
     assert (output_dir / "balance_sheet.csv").exists()
+    assert (output_dir / "cash_flow.csv").exists()
     assert (output_dir / "reconciliation_results.csv").exists()
 
     reconciliation_summary = summary["reconciliation_results"]

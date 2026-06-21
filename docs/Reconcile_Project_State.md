@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 24 — Add correction storage and optional local classifier.
+Current step: Step 25 — Add cash flow report.
 
-Status: Step 24 complete.
+Status: Step 25 complete.
 
-Approximate project completion: 79% to 81%.
+Approximate project completion: 83% to 85%.
 
 Current summary:
 
@@ -102,6 +102,17 @@ Current summary:
 * Step 24 added rule/correction/classifier precedence: latest correction, then rule, then confident local classifier, then uncategorized.
 * Step 24 added classifier confidence handling and low-confidence uncategorized results.
 * Step 24 added focused correction and classifier tests covering validation, ordering, mutation safety, training behavior, prediction behavior, and precedence.
+* Step 25 added a direct-method cash flow report from posted journal activity.
+* Step 25 identifies cash-like asset/debit accounts using selected account IDs or cash/checking/bank heuristics.
+* Step 25 classifies cash movement counterparties into operating, investing, and financing sections.
+* Step 25 calculates beginning cash immediately before the report start date.
+* Step 25 calculates ending cash through the report end date.
+* Step 25 proves beginning cash plus net cash change equals ending cash with a cash-balances-tie flag.
+* Step 25 excludes or nets out cash-to-cash transfers so transfers do not inflate cash flow.
+* Step 25 added cash flow CSV export and included `cash_flow.csv` in `export_all_reports`.
+* Step 25 added CLI support for `report cash-flow`.
+* Step 25 generated fake sample output at `examples/sample_output/cash_flow.csv`.
+* Step 25 added focused cash flow report, export, and CLI tests.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -125,7 +136,7 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Dashboard, cash flow, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+* Dashboard, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
 
 Completed Step 18 files:
 
@@ -624,11 +635,94 @@ python -m ruff check .  # All checks passed locally
 git status              # expected Step 23 files only
 ```
 
+Completed Step 25 files:
+
+```text
+src/reconcile/reports/cash_flow.py
+src/reconcile/reports/__init__.py
+src/reconcile/reports/export.py
+src/reconcile/cli.py
+tests/test_cash_flow_report.py
+tests/test_report_exports.py
+tests/test_cli.py
+examples/sample_output/cash_flow.csv
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 25 summary:
+
+* Added `src/reconcile/reports/cash_flow.py`.
+* Added `generate_cash_flow_statement(connection, *, start_date, end_date, cash_account_id=None)`.
+* Added `cash_flow_totals(statement)`.
+* Added `classify_cash_flow_section(counterparty_account_type, counterparty_account_code=None, counterparty_account_name=None)`.
+* Implemented direct-method cash flow reporting from existing posted journal entries and journal lines.
+* Identified cash-like accounts from selected `cash_account_id` or from asset/debit accounts with code `1000` or names containing cash, checking, or bank.
+* Used the cash flow sign convention where debit to cash is an inflow and credit to cash is an outflow.
+* Classified revenue and expense counterparties as operating.
+* Classified non-cash asset counterparties as investing.
+* Classified liability and equity counterparties as financing.
+* Validated report dates as real `datetime.date` values and rejected `datetime.datetime` values.
+* Rejected date ranges where start date is after end date.
+* Calculated beginning cash from posted cash activity before the start date.
+* Calculated ending cash from posted cash activity through the end date.
+* Calculated operating, investing, financing, and net cash change totals.
+* Added `cash_balances_tie` to verify beginning cash plus net cash change equals ending cash.
+* Kept report rows JSON-serializable.
+* Excluded pure cash-to-cash transfers from operating, investing, and financing activity.
+* Supported selected cash account reporting with validation for missing and non-cash accounts.
+* Added proportional allocation for multiple non-cash counterparties when needed.
+* Updated `src/reconcile/reports/__init__.py` to export the cash flow report helpers.
+* Added `export_cash_flow_csv(...)` to `src/reconcile/reports/export.py`.
+* Added official `cash_flow.csv` output to `export_all_reports(...)`.
+* Kept cash flow CSV exports to section rows only, with totals returned in the summary.
+* Updated CLI `report cash-flow` command.
+* Updated CLI `export-reports` output so cash flow export is shown with the other report exports.
+* Added `tests/test_cash_flow_report.py`.
+* Updated `tests/test_report_exports.py` for cash flow CSV behavior and `export_all_reports`.
+* Updated `tests/test_cli.py` for `report cash-flow` and cash flow export behavior.
+* Generated fake sample output at `examples/sample_output/cash_flow.csv`.
+* Confirmed cash flow generation and export are read-only and mutation-safe.
+* Did not add Streamlit, dashboard pages, indirect-method cash flow, closing entries, retained earnings, reconciliation changes, categorization changes, CI, Excel export, JSON export, PDF export, new dependencies, or new accounting behavior.
+
+Commands run for Step 25:
+
+```bash
+python -m ruff check .
+python -m pytest
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+git status
+```
+
+Results:
+
+```text
+python -m ruff check .  # All checks passed
+python -m pytest        # 709 passed in the final full test run
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+# Cash Flow Statement: 2026-01-01 to 2026-01-31
+# Operating cash flow: -950.00
+# Investing cash flow: 1200.00
+# Financing cash flow: 5000.00
+# Net cash change: 5250.00
+# Beginning cash: 0.00
+# Ending cash: 5250.00
+# Cash balances tie: True
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+# Exported reports to: examples\sample_output
+# trial_balance: examples\sample_output\trial_balance.csv (9 rows)
+# income_statement: examples\sample_output\income_statement.csv (3 rows)
+# balance_sheet: examples\sample_output\balance_sheet.csv (5 rows)
+# cash_flow: examples\sample_output\cash_flow.csv (4 rows)
+# reconciliation_results: skipped
+git status  # expected Step 25 files only before Project State update
+```
+
 Next planned step:
 
-Step 25 — Add cash flow report.
+Step 26 — Add Streamlit dashboard foundation.
 
-Step 25 status: Not started.
+Step 26 status: Not started.
 
 ---
 
@@ -5142,48 +5236,118 @@ Add categorization corrections and local classifier
 
 ### Step 25 — Add cash flow report
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Add a direct-method cash flow report.
 
-Expected work:
+Completed work:
 
-* Add cash flow report module.
-* Classify cash movements as operating, investing, or financing using account/category mapping.
-* Calculate beginning cash.
-* Calculate cash inflows.
-* Calculate cash outflows.
-* Calculate ending cash.
-* Add tests.
+* Added `src/reconcile/reports/cash_flow.py`.
+* Added `generate_cash_flow_statement(connection, *, start_date, end_date, cash_account_id=None)`.
+* Added `cash_flow_totals(statement)`.
+* Added `classify_cash_flow_section(counterparty_account_type, counterparty_account_code=None, counterparty_account_name=None)`.
+* Implemented direct-method cash flow reporting from existing posted journal activity.
+* Identified cash-like asset/debit accounts from selected account IDs or cash/checking/bank heuristics.
+* Used account code `1000` and account names containing `cash`, `checking`, or `bank` as cash-like account hints.
+* Used debit-to-cash as positive cash inflow.
+* Used credit-from-cash as negative cash outflow.
+* Classified revenue and expense counterparties as operating.
+* Classified non-cash asset counterparties as investing.
+* Classified liability and equity counterparties as financing.
+* Excluded pure cash-to-cash transfers so transfers do not inflate cash flow.
+* Calculated beginning cash immediately before the report start date.
+* Calculated ending cash through the report end date.
+* Calculated operating, investing, financing, and net cash change totals.
+* Added `cash_balances_tie` to prove beginning cash plus net cash change equals ending cash.
+* Returned report dates as ISO strings.
+* Kept all statement rows JSON-serializable.
+* Added validation for invalid dates, datetime values, invalid date ranges, invalid account types, missing cash accounts, and non-cash selected accounts.
+* Added proportional allocation for multiple non-cash counterparties when simple allocation is practical.
+* Updated `src/reconcile/reports/__init__.py` to export cash flow helpers.
+* Added `export_cash_flow_csv(...)` to report exports.
+* Added `cash_flow.csv` to `export_all_reports(...)`.
+* Added CLI `report cash-flow`.
+* Updated CLI `export-reports` output to include cash flow export results.
+* Added fake sample output at `examples/sample_output/cash_flow.csv`.
+* Added `tests/test_cash_flow_report.py`.
+* Updated `tests/test_report_exports.py`.
+* Updated `tests/test_cli.py`.
+* Confirmed cash flow generation and export do not append events or mutate ledger, account, journal, balance, bank, reconciliation, or categorization tables.
+* Did not add Streamlit, dashboard cash flow page, indirect-method cash flow, retained earnings, closing entries, reconciliation changes, categorization changes, CI, Excel export, JSON export, PDF export, external APIs, LLM behavior, or new dependencies.
 
-Allowed files to create/edit:
+Files created or edited:
 
 ```text
 src/reconcile/reports/cash_flow.py
+src/reconcile/reports/__init__.py
+src/reconcile/reports/export.py
+src/reconcile/cli.py
 tests/test_cash_flow_report.py
+tests/test_report_exports.py
+tests/test_cli.py
+examples/sample_output/cash_flow.csv
 docs/Reconcile_Project_State.md
 ```
 
-Do not implement yet:
-
-* Complex indirect-method cash flow
-* Statement of retained earnings
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
 python -m ruff check .
+python -m pytest
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+git status
+```
+
+Results:
+
+```text
+python -m ruff check .  # All checks passed
+python -m pytest        # 709 passed in final full run
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+# Cash Flow Statement: 2026-01-01 to 2026-01-31
+# Operating cash flow: -950.00
+# Investing cash flow: 1200.00
+# Financing cash flow: 5000.00
+# Net cash change: 5250.00
+# Beginning cash: 0.00
+# Ending cash: 5250.00
+# Cash balances tie: True
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+# Exported reports to: examples\sample_output
+# trial_balance: examples\sample_output\trial_balance.csv (9 rows)
+# income_statement: examples\sample_output\income_statement.csv (3 rows)
+# balance_sheet: examples\sample_output\balance_sheet.csv (5 rows)
+# cash_flow: examples\sample_output\cash_flow.csv (4 rows)
+# reconciliation_results: skipped
+git status  # expected Step 25 files only before Project State update
 ```
 
 Definition of done:
 
-* Cash flow report produces expected totals.
-* Beginning cash plus net change equals ending cash.
-* Tests pass.
+* `src/reconcile/reports/cash_flow.py` exists.
+* `tests/test_cash_flow_report.py` exists.
+* Direct-method cash flow statement works.
+* Operating, investing, and financing sections are classified.
+* Beginning cash is calculated correctly.
+* Ending cash is calculated correctly.
+* Net cash change is calculated correctly.
+* Beginning cash plus net cash change equals ending cash.
+* Cash transfers are excluded or net to zero.
+* Cash flow generation is read-only and mutation-safe.
+* Cash flow CSV export works.
+* `export_all_reports` includes `cash_flow.csv`.
+* CLI `report cash-flow` works.
+* Fake sample cash flow output exists under `examples/sample_output/cash_flow.csv`.
+* Existing reports still work.
+* Existing exports still work.
+* Existing CLI commands still work.
+* No Streamlit, dashboard, CI, indirect cash flow, closing entries, categorization changes, reconciliation changes, or new dependencies were added.
+* Existing tests pass.
 * Ruff passes.
+* Project State is updated.
 
 Suggested commit message:
 

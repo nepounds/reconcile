@@ -54,7 +54,7 @@ def test_help_returns_zero(capsys: pytest.CaptureFixture[str]) -> None:
 def test_init_db_creates_database(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    ) -> None:
+) -> None:
     db_path = _tmp_db(tmp_path)
 
     result = main(["init-db", "--db-path", db_path])
@@ -196,6 +196,32 @@ def test_report_balance_sheet_succeeds_after_seed(
     assert "Balanced" in output
 
 
+def test_report_cash_flow_succeeds_after_seed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    result = main(
+        [
+            "report",
+            "cash-flow",
+            "--db-path",
+            db_path,
+            "--from",
+            "2026-01-01",
+            "--to",
+            "2026-01-31",
+        ]
+    )
+
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "Cash Flow Statement" in output
+    assert "Net cash change" in output
+    assert "Ending cash" in output
+
+
 def test_invalid_report_date_fails_with_nonzero_return(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -217,6 +243,29 @@ def test_invalid_report_date_fails_with_nonzero_return(
 
     assert result != 0
     assert "YYYY-MM-DD" in capsys.readouterr().err
+
+
+def test_report_cash_flow_invalid_dates_return_nonzero(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    db_path = _seeded_db(tmp_path)
+
+    result = main(
+        [
+            "report",
+            "cash-flow",
+            "--db-path",
+            db_path,
+            "--from",
+            "2026-02-01",
+            "--to",
+            "2026-01-31",
+        ]
+    )
+
+    assert result != 0
+    assert "error:" in capsys.readouterr().err
 
 
 def test_import_bank_imports_demo_csv(
@@ -409,11 +458,13 @@ def test_export_reports_succeeds_after_demo_seed(
     assert "trial_balance" in output
     assert "income_statement" in output
     assert "balance_sheet" in output
+    assert "cash_flow" in output
     assert "reconciliation_results: skipped" in output
 
     assert (output_dir / "trial_balance.csv").exists()
     assert (output_dir / "income_statement.csv").exists()
     assert (output_dir / "balance_sheet.csv").exists()
+    assert (output_dir / "cash_flow.csv").exists()
     assert not (output_dir / "reconciliation_results.csv").exists()
 
 
