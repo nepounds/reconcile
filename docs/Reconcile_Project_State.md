@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 26 — Add Streamlit dashboard foundation.
+Current step: Step 27 — Add dashboard report pages and event timeline.
 
-Status: Step 26 complete.
+Status: Step 27 complete.
 
-Approximate project completion: 86% to 88%.
+Approximate project completion: 90% to 92%.
 
 Current summary:
 
@@ -122,6 +122,16 @@ Current summary:
 * Step 26 added a small trial balance/account balance preview using existing report logic.
 * Step 26 added helper tests for dashboard database status, table counts, summary data, formatting, import safety, mutation safety, and missing optional tables.
 * Step 26 added Streamlit as a runtime dependency.
+* Step 27 expanded the Streamlit dashboard with sidebar navigation.
+* Step 27 added read-only dashboard pages for Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline.
+* Step 27 added default report dates of 2026-01-01 through 2026-01-31 and a default as-of date of 2026-01-31.
+* Step 27 added report-loading helpers that call existing package report functions instead of adding dashboard business logic.
+* Step 27 added dashboard display helpers for optional cents, optional boolean status, report row extraction, and report rows with cent fields.
+* Step 27 added friendly validation handling for invalid report date ranges and invalid as-of dates.
+* Step 27 added a read-only event timeline helper that queries `ledger_events` in deterministic `event_sequence` order.
+* Step 27 added compact payload inspection for ledger events in Streamlit expanders.
+* Step 27 preserved the known accounting refinement note that customer collections through Accounts Receivable should classify as operating cash flow, not investing.
+* Step 27 expanded dashboard helper tests for report loaders, date validation, event timeline loading, JSON-serializable helper data, and read-only safety.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -145,7 +155,74 @@ Current summary:
 * Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
 * Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Full dashboard report pages, event timeline, manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+* Dashboard report pages and event timeline are implemented as read-only Streamlit pages.
+* Manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+
+Completed Step 27 files:
+
+```text
+dashboard/streamlit_app.py
+tests/test_streamlit_dashboard.py
+docs/Reconcile_Project_State.md
+```
+
+Completed Step 27 summary:
+
+* Expanded `dashboard/streamlit_app.py` from a foundation shell into a read-only demo dashboard with sidebar navigation.
+* Added Streamlit navigation pages for Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline.
+* Preserved the default database path of `exports/reconcile.db`.
+* Preserved missing-database setup instructions and graceful missing-database behavior.
+* Preserved overview database counts, summary metrics, and account-balance preview behavior.
+* Added default report dates for January 2026 and a default balance-sheet as-of date of 2026-01-31.
+* Added date-range and as-of-date validation helpers that reject invalid ranges and datetime values.
+* Added read-only report-loading helpers for trial balance, income statement, balance sheet, and cash flow.
+* Kept dashboard report helpers thin by calling existing report functions in `src/reconcile/reports/`.
+* Added display formatting helpers for optional integer cents, optional boolean statuses, and report rows with cent fields.
+* Added tolerant report-row extraction for report functions that return sectioned dictionaries rather than only flat `rows` lists.
+* Added fallback cash-flow display rows from cash-flow totals when the report has totals but no detail rows.
+* Added read-only event timeline loading from `ledger_events` ordered by `event_sequence ASC`.
+* Displayed event timeline fields for sequence, type, effective date, timestamp, source, actor, correlation ID, and causation ID.
+* Displayed event payload JSON in expandable sections without replaying or mutating events.
+* Added a dashboard cash-flow limitation note: customer collections through Accounts Receivable should classify as operating cash flow, not investing.
+* Updated `tests/test_streamlit_dashboard.py` for Step 27 helper coverage.
+* Tested dashboard module import safety.
+* Tested page constants and page-rendering helper existence.
+* Tested default report dates.
+* Tested date validation and invalid date ranges.
+* Tested trial balance, income statement, balance sheet, and cash flow report loaders.
+* Tested event timeline loading, deterministic sequence ordering, expected fields, and empty event-log behavior.
+* Tested missing database behavior for new report helpers.
+* Tested cents and boolean formatters.
+* Tested JSON-serializable dashboard helper payloads.
+* Tested report helpers do not append ledger events.
+* Tested report helpers do not mutate account balances.
+* Tested event timeline loading does not mutate ledger events.
+* Tested helpers do not import bank files, run reconciliation, or write export files.
+* Did not add reconciliation review UI, categorization review UI, manual correction UI, manual confirmation/rejection UI, dashboard writeback, CI, deployment, screenshots, README polish, engine changes, new dependencies, or new accounting behavior.
+
+Commands run for Step 27:
+
+```bash
+python -m ruff check dashboard/streamlit_app.py
+python -m ruff check tests/test_streamlit_dashboard.py
+python -m pytest tests/test_streamlit_dashboard.py
+python -m ruff check .
+python -m pytest
+streamlit run dashboard/streamlit_app.py
+git status
+```
+
+Results:
+
+```text
+python -m ruff check dashboard/streamlit_app.py      # All checks passed after import ordering and helper-order fixes
+python -m ruff check tests/test_streamlit_dashboard.py # All checks passed
+python -m pytest tests/test_streamlit_dashboard.py   # 35 passed after report-row extraction and cash-flow fallback fixes
+python -m ruff check .                              # passed locally as reported
+python -m pytest                                    # passed locally as reported
+streamlit run dashboard/streamlit_app.py            # dashboard launched; all Step 27 pages showed no errors in manual smoke check
+git status                                          # initially showed dashboard/streamlit_app.py only before test and Project State updates
+```
 
 Completed Step 18 files:
 
@@ -814,9 +891,9 @@ git status                                      # expected Step 26 files shown
 
 Next planned step:
 
-Step 27 — Add dashboard report pages and event timeline.
+Step 28 — Add dashboard reconciliation and categorization review.
 
-Step 27 status: Not started.
+Step 28 status: Not started.
 
 ---
 
@@ -5595,51 +5672,166 @@ Add Streamlit dashboard foundation
 
 ### Step 27 — Add dashboard report pages and event timeline
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Display point-in-time reports and event history in Streamlit.
 
-Expected work:
+Completed work:
 
-* Add trial balance page.
-* Add income statement page.
-* Add balance sheet page.
-* Add cash flow page if Step 25 is complete.
-* Add event timeline page.
-* Add as-of date or event sequence selector.
-* Add screenshots if useful.
+* Expanded `dashboard/streamlit_app.py` from the Step 26 foundation shell into a useful read-only demo dashboard.
+* Added Streamlit sidebar navigation with these pages:
 
-Allowed files to create/edit:
+```text
+Overview
+Trial Balance
+Income Statement
+Balance Sheet
+Cash Flow
+Event Timeline
+```
+
+* Preserved the Reconcile title, local-first subtitle, database path input, default `exports/reconcile.db` path, missing-database setup instructions, overview summary, and safe `main()` entrypoint guard.
+* Preserved module import safety for pytest.
+* Added report defaults:
+
+```text
+start date: 2026-01-01
+end date: 2026-01-31
+as-of date: 2026-01-31
+```
+
+* Added date validation helpers for report ranges and as-of dates.
+* Added friendly invalid-date handling for income statement and cash flow ranges.
+* Added friendly invalid-date handling for balance sheet as-of dates.
+* Added `format_cents_for_dashboard(cents: int | None) -> str`.
+* Added `format_bool_status(value: bool | None) -> str`.
+* Added report-row display helpers for cent-field formatting.
+* Added tolerant report-row extraction for report helpers that return sectioned dictionaries instead of only flat row lists.
+* Added a cash-flow row fallback from totals for tiny ledgers where totals exist but no detail rows are returned.
+* Added `load_trial_balance_report(db_path)`.
+* Added `load_income_statement_report(db_path, start_date, end_date)`.
+* Added `load_balance_sheet_report(db_path, as_of_date)`.
+* Added `load_cash_flow_report(db_path, start_date, end_date)`.
+* Added `load_event_timeline(db_path)`.
+* Trial Balance page uses `generate_trial_balance(connection)` and `trial_balance_totals(rows)`.
+* Trial Balance page displays account code, account name, account type, normal balance, ending debit balance, and ending credit balance.
+* Trial Balance page displays ending debit total, ending credit total, and balanced status.
+* Income Statement page uses `generate_income_statement(connection, start_date, end_date)` and `income_statement_totals(rows)`.
+* Income Statement page displays the selected date range, revenue/expense rows, total revenue, total expenses, and net income.
+* Balance Sheet page uses `generate_balance_sheet(connection, as_of_date)`.
+* Balance Sheet page displays the selected as-of date, asset/liability/equity rows, total assets, total liabilities, total equity, total liabilities and equity, and balanced status.
+* Cash Flow page uses `generate_cash_flow_statement(connection, start_date, end_date)` and `cash_flow_totals(statement)`.
+* Cash Flow page displays the selected date range, operating/investing/financing rows, net cash change, beginning cash, ending cash, and cash-balance tie status.
+* Cash Flow page includes the known accounting refinement note that customer collections through Accounts Receivable should classify as operating cash flow, not investing.
+* Event Timeline page reads directly from `ledger_events` in deterministic `event_sequence` order.
+* Event Timeline page displays event sequence, event type, effective date, event timestamp, source, actor, correlation ID, and causation ID.
+* Event Timeline page displays `payload_json` inside expandable sections.
+* Event Timeline page does not replay events or rebuild projections.
+* Dashboard report helpers handle missing databases gracefully.
+* Dashboard report helpers handle SQLite and validation errors with friendly unavailable/error dictionaries.
+* Dashboard remains read-only.
+* Dashboard helpers do not append ledger events.
+* Dashboard helpers do not modify accounts.
+* Dashboard helpers do not modify journal entries.
+* Dashboard helpers do not modify journal entry lines.
+* Dashboard helpers do not modify account balances.
+* Dashboard helpers do not modify bank transactions.
+* Dashboard helpers do not modify reconciliation runs, matches, or links.
+* Dashboard helpers do not modify category corrections.
+* Dashboard helpers do not rebuild projections.
+* Dashboard helpers do not import bank files.
+* Dashboard helpers do not run reconciliation.
+* Dashboard helpers do not train classifiers.
+* Dashboard helpers do not write export files.
+* Updated `tests/test_streamlit_dashboard.py` for Step 27 helper coverage.
+* Tested dashboard module import safety.
+* Tested navigation/page constants and render helper existence.
+* Tested default report dates.
+* Tested trial balance report loading from demo-like data.
+* Tested income statement report loading for date ranges.
+* Tested balance sheet report loading for as-of dates.
+* Tested cash flow report loading for date ranges.
+* Tested event timeline loading in sequence order.
+* Tested event timeline expected fields.
+* Tested event timeline empty-log behavior.
+* Tested missing-database report helper behavior.
+* Tested invalid income statement and cash flow date ranges.
+* Tested cents formatting for positive, negative, zero, and `None`.
+* Tested boolean formatting for true, false, and `None`.
+* Tested JSON-serializable helper payloads.
+* Tested report-loading helpers do not append ledger events.
+* Tested report-loading helpers do not mutate account balances.
+* Tested event timeline helper does not mutate ledger events.
+* Tested helpers do not import bank files.
+* Tested helpers do not run reconciliation.
+* Tested helpers do not write export files.
+* Did not add reconciliation review UI.
+* Did not add categorization review UI.
+* Did not add manual correction recording.
+* Did not add manual reconciliation confirmation or rejection.
+* Did not add dashboard writeback.
+* Did not add Streamlit Cloud deployment.
+* Did not add screenshots.
+* Did not add CI.
+* Did not add README polish.
+* Did not change accounting, reconciliation, categorization, import, projection, or report engine behavior.
+
+Files created or edited:
 
 ```text
 dashboard/streamlit_app.py
+tests/test_streamlit_dashboard.py
 docs/Reconcile_Project_State.md
-README.md
 ```
 
-Do not implement yet:
-
-* Reconciliation review UI
-* Categorization review UI
-* Cloud deployment
-
-Commands to run:
+Commands run:
 
 ```bash
-python -m pytest
+python -m ruff check dashboard/streamlit_app.py
+python -m ruff check tests/test_streamlit_dashboard.py
+python -m pytest tests/test_streamlit_dashboard.py
 python -m ruff check .
+python -m pytest
 streamlit run dashboard/streamlit_app.py
+git status
+```
+
+Results:
+
+```text
+python -m ruff check dashboard/streamlit_app.py       # All checks passed after import ordering and helper-order fixes
+python -m ruff check tests/test_streamlit_dashboard.py # All checks passed
+python -m pytest tests/test_streamlit_dashboard.py    # 35 passed after report-row extraction and cash-flow fallback fixes
+python -m ruff check .                               # passed locally as reported
+python -m pytest                                     # passed locally as reported
+streamlit run dashboard/streamlit_app.py             # manual smoke passed; all Step 27 pages showed no errors
+git status                                           # expected Step 27 files after Project State update
 ```
 
 Definition of done:
 
-* Reports display correctly.
-* Event timeline displays correctly.
-* Dashboard still keeps business logic thin.
-* Tests pass.
-* Ruff passes.
+* Dashboard launches with `streamlit run dashboard/streamlit_app.py`.
+* Overview page still works.
+* Sidebar navigation exists.
+* Trial Balance page works.
+* Income Statement page works.
+* Balance Sheet page works.
+* Cash Flow page works.
+* Event Timeline page works.
+* Missing database state is handled gracefully.
+* Demo database can be read.
+* Report pages use existing package report functions.
+* Event timeline reads `ledger_events` without mutation.
+* Dashboard remains read-only.
+* Dashboard logic remains thin.
+* Core accounting/reconciliation/reporting logic remains in `src/reconcile/`.
+* `tests/test_streamlit_dashboard.py` covers Step 27 helper behavior.
+* Tests pass locally as reported.
+* Ruff passes locally as reported.
+* No reconciliation review UI, categorization review UI, writeback workflow, CI, deployment, screenshots, or new engine behavior was added.
+* Project State is updated.
 
 Suggested commit message:
 
