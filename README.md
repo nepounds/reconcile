@@ -1,53 +1,56 @@
 # Reconcile
 
-Reconcile is a local-first Python accounting engine that uses
-event-sourced double-entry bookkeeping, rebuildable SQLite projections,
-property-tested accounting invariants, explainable bank reconciliation,
-deterministic categorization, and financial statement exports.
+[![CI][ci-badge]][ci-workflow]
 
-It is built as a portfolio project for accounting, finance, data, and
-software engineering roles.
+Reconcile is a local-first Python accounting engine that uses event-sourced
+double-entry bookkeeping, rebuildable SQLite projections, point-in-time
+financial reports, explainable bank reconciliation, and a Streamlit review
+dashboard.
+
+It is built as a portfolio project for accounting, finance, data, and software
+engineering roles.
 
 The project focuses on a practical accounting systems problem:
 
-> Small-business accounting data needs to be accurate, auditable,
-> explainable, and reconcilable. Reconcile records accounting actions as
-> immutable events, rebuilds financial state from those events, and
-> reconciles imported bank activity against ledger cash movements.
+> Small-business accounting data needs to be accurate, auditable, explainable,
+> and reconcilable. Reconcile records accounting actions as immutable events,
+> rebuilds financial state from those events, and reconciles imported bank
+> activity against ledger cash movements.
 
 ---
 
 ## Current status
 
-Reconcile is in active development.
+Reconcile is in final portfolio-polish mode.
 
 Current completed milestone:
 
 ```text
-Step 25 — Add cash flow report
+Step 30 — Polish README and architecture docs
 ```
 
 Approximate project completion:
 
 ```text
-83% to 85%
+96% to 98%
 ```
 
 Current validation status:
 
 ```text
-709 tests passed locally
-ruff clean locally
+Cash-flow syntax check passed in Step 30 sandbox
+Full local pytest and ruff validation should be run after applying this patch
+GitHub Actions CI passed after Step 29
 ```
 
-The core Python engine is largely complete. Reconcile now has the
-event-sourced ledger, accounting projections, financial reports, bank
-import, exact/fuzzy/split reconciliation, categorization, correction
-storage, local classifier behavior, CLI workflows, CSV exports, fake
-sample outputs, and direct-method cash flow reporting.
+The core Python engine is largely complete. Reconcile now has the event-sourced
+ledger, accounting projections, financial reports, bank import,
+exact/fuzzy/split reconciliation, categorization, correction storage, local
+classifier behavior, CLI workflows, CSV exports, fake sample outputs,
+direct-method cash flow reporting, a read-only Streamlit dashboard, and GitHub
+Actions CI.
 
-Remaining planned work is mostly dashboard, CI, documentation, and final
-portfolio polish.
+Remaining planned work is Step 31 final portfolio cleanup.
 
 ---
 
@@ -57,13 +60,16 @@ Reconcile currently supports:
 
 - Opening accounts through immutable accounting events.
 - Posting balanced double-entry journal entries.
-- Rejecting invalid or unbalanced journal entries.
+- Rejecting invalid or unbalanced journal entries before they reach the event
+  store.
 - Building account-balance projections.
 - Rebuilding projections from the append-only event log.
 - Generating a trial balance.
 - Generating an income statement.
 - Generating a balance sheet.
 - Generating a direct-method cash flow statement.
+- Classifying ordinary Accounts Receivable and Accounts Payable cash movements
+  as operating cash flow.
 - Reversing posted journal entries through immutable reversal events.
 - Running property-based accounting invariant tests with Hypothesis.
 - Importing fake bank statement CSV data.
@@ -79,11 +85,14 @@ Reconcile currently supports:
 - Applying deterministic rule-based categorization.
 - Recording append-only categorization corrections.
 - Training a small local standard-library classifier from corrections.
-- Applying categorization precedence:
-  correction, then rule, then confident classifier, then uncategorized.
-- Exporting trial balance, income statement, balance sheet, cash flow,
-  and reconciliation results to CSV.
+- Applying categorization precedence: correction, then rule, then confident
+  classifier, then uncategorized.
+- Exporting trial balance, income statement, balance sheet, cash flow, and
+  reconciliation results to CSV.
 - Running core workflows through a thin `argparse` CLI.
+- Reviewing reports, events, reconciliation output, and categorization output in
+  a read-only Streamlit dashboard.
+- Running CI through GitHub Actions with Ruff and pytest.
 
 ---
 
@@ -91,26 +100,27 @@ Reconcile currently supports:
 
 Accounting systems are not just CRUD apps.
 
-A useful accounting engine needs to preserve history, prove entries
-balance, rebuild derived state, explain reconciliation decisions, and
-avoid unsafe automatic matches.
+A useful accounting engine needs to preserve history, prove entries balance,
+rebuild derived state, explain reconciliation decisions, and avoid unsafe
+automatic matches.
 
 Reconcile demonstrates those ideas in a small, local-first Python project.
 
-The goal is not to replace QuickBooks, Xero, or an ERP. The goal is to
-show a clear, testable accounting engine with the kind of design choices
-used in real accounting and fintech systems:
+The goal is not to replace QuickBooks, Xero, or an ERP. The goal is to show a
+clear, testable accounting engine with the kind of design choices used in real
+accounting and fintech systems:
 
-- Append-only event history
-- Double-entry validation
-- Reversal entries instead of mutation
-- Rebuildable projections
-- Integer-cents money handling
-- Point-in-time financial reports
-- Direct-method cash flow reporting
-- Explainable reconciliation logic
-- Deterministic categorization with correction precedence
-- Property-based invariant tests
+- Append-only event history.
+- Double-entry validation.
+- Reversal entries instead of mutation.
+- Rebuildable projections.
+- Integer-cents money handling.
+- Point-in-time financial reports.
+- Direct-method cash flow reporting.
+- Explainable reconciliation logic.
+- Deterministic categorization with correction precedence.
+- Property-based invariant tests.
+- A thin read-only dashboard for portfolio review.
 
 ---
 
@@ -120,18 +130,18 @@ Resume-style summary:
 
 > Built Reconcile, an event-sourced double-entry general ledger engine in
 > Python and SQLite with immutable journal events, projection replay,
-> point-in-time financial statements, direct-method cash flow reporting,
-> bank reconciliation, categorization correction tracking, and
-> property-based accounting invariant tests.
+> point-in-time financial statements, direct-method cash flow reporting, bank
+> reconciliation, categorization correction tracking, a Streamlit review
+> dashboard, GitHub Actions CI, and property-based accounting invariant tests.
 
 Longer explanation:
 
-> Reconcile is a local-first Python accounting engine that records
-> accounting actions as append-only events, projects those events into SQL
-> read models, generates financial statements, imports bank transactions,
-> extracts ledger cash movements, reconciles bank activity against the
-> ledger with exact/fuzzy/split explanations, and exports fake sample
-> outputs for portfolio review.
+> Reconcile is a local-first Python accounting engine that records accounting
+> actions as append-only events, projects those events into SQL read models,
+> generates financial statements, imports bank transactions, extracts ledger
+> cash movements, reconciles bank activity against the ledger with
+> exact/fuzzy/split explanations, and exposes fake sample outputs for portfolio
+> review.
 
 ---
 
@@ -141,6 +151,7 @@ Runtime:
 
 - Python
 - SQLite
+- Streamlit
 - Standard library CSV, JSON, argparse, pathlib, and datetime tooling
 
 Testing and tooling:
@@ -148,12 +159,7 @@ Testing and tooling:
 - pytest
 - Hypothesis
 - ruff
-
-Planned for remaining work:
-
-- Streamlit for the dashboard
-- pandas only where useful for dashboard display
-- plotly only if dashboard charts justify it
+- GitHub Actions
 
 Not currently used:
 
@@ -161,9 +167,10 @@ Not currently used:
 - LLMs
 - external APIs
 - cloud database
+- real bank APIs
 
-Step 24 intentionally used a small standard-library classifier instead
-of adding scikit-learn.
+Step 24 intentionally used a small standard-library classifier instead of
+adding scikit-learn.
 
 ---
 
@@ -200,76 +207,80 @@ If the program makes a match decision, store why it made that decision.
 
 ## Quickstart
 
+These commands are Windows PowerShell friendly and work from the repository
+root.
+
 Install the project in editable mode with development dependencies:
 
-```bash
+```powershell
 python -m pip install -e ".[dev]"
 ```
 
 Run the test suite:
 
-```bash
+```powershell
 python -m pytest
 ```
 
 Run linting:
 
-```bash
+```powershell
 python -m ruff check .
 ```
 
 Create a fresh local demo database:
 
-```bash
+```powershell
 python scripts/run_reconcile.py init-db --db-path exports/reconcile.db
 ```
 
 Seed fake demo accounting data:
 
-```bash
+```powershell
 python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db
-```
-
-Rebuild projections from the event log:
-
-```bash
-python scripts/run_reconcile.py rebuild-projections --db-path exports/reconcile.db
-```
-
-Run reports:
-
-```bash
-python scripts/run_reconcile.py report trial-balance --db-path exports/reconcile.db
-python scripts/run_reconcile.py report income-statement --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
-python scripts/run_reconcile.py report balance-sheet --db-path exports/reconcile.db --as-of 2026-01-31
-python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
 ```
 
 Import the fake demo bank statement:
 
-```bash
+```powershell
 python scripts/run_reconcile.py import-bank examples/demo_company/bank_statement.csv --db-path exports/reconcile.db
 ```
 
-Run reconciliation:
+Run exact reconciliation:
 
-```bash
+```powershell
 python scripts/run_reconcile.py reconcile exact --db-path exports/reconcile.db --cash-account-id acct-cash --from 2026-01-01 --to 2026-01-31
+```
+
+Run fuzzy reconciliation:
+
+```powershell
 python scripts/run_reconcile.py reconcile fuzzy --db-path exports/reconcile.db --cash-account-id acct-cash --from 2026-01-01 --to 2026-01-31
+```
+
+Run split reconciliation:
+
+```powershell
 python scripts/run_reconcile.py reconcile split --db-path exports/reconcile.db --cash-account-id acct-cash --from 2026-01-01 --to 2026-01-31
 ```
 
 Export fake sample reports:
 
-```bash
+```powershell
 python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+```
+
+Launch the local dashboard:
+
+```powershell
+streamlit run dashboard/streamlit_app.py
 ```
 
 Do not commit `exports/reconcile.db`. It is a local generated database.
 
 ---
 
-## CLI commands
+## Useful CLI commands
 
 Current CLI commands:
 
@@ -288,8 +299,17 @@ reconcile split
 export-reports
 ```
 
-The CLI is intentionally thin. It parses arguments, opens the database,
-calls package functions, and prints concise plain-text output.
+Run individual reports:
+
+```powershell
+python scripts/run_reconcile.py report trial-balance --db-path exports/reconcile.db
+python scripts/run_reconcile.py report income-statement --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+python scripts/run_reconcile.py report balance-sheet --db-path exports/reconcile.db --as-of 2026-01-31
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+```
+
+The CLI is intentionally thin. It parses arguments, opens the database, calls
+package functions, and prints concise plain-text output.
 
 ---
 
@@ -324,10 +344,52 @@ examples/sample_output/balance_sheet.csv
 examples/sample_output/cash_flow.csv
 ```
 
+The local demo database is generated at:
+
+```text
+exports/reconcile.db
+```
+
 All sample data is fake and safe to commit.
 
-No real bank data, customer data, private financial data, or credentials
-should be added to this repository.
+No real bank data, customer data, private financial data, or credentials should
+be added to this repository.
+
+---
+
+## Dashboard
+
+The Streamlit dashboard is a thin read-only review layer over the local SQLite
+engine and package report functions.
+
+Implemented dashboard pages:
+
+- Overview
+- Trial Balance
+- Income Statement
+- Balance Sheet
+- Cash Flow
+- Event Timeline
+- Bank Reconciliation
+- Categorization Review
+
+Dashboard behavior:
+
+- Reads from `exports/reconcile.db` by default.
+- Shows friendly setup instructions when the database does not exist.
+- Displays report tables, cash-flow totals, event history, reconciliation
+  explanations, and categorization review fields.
+- Keeps accounting, reconciliation, and categorization logic in tested package
+  modules instead of Streamlit code.
+
+Dashboard limitations:
+
+- It is read-only.
+- It does not write categorization corrections.
+- It does not confirm or reject reconciliation matches.
+- It does not import bank files.
+- It does not rebuild projections automatically.
+- It is a local portfolio review interface, not a production application.
 
 ---
 
@@ -348,6 +410,7 @@ src/reconcile/imports/
 src/reconcile/reconciliation/
 src/reconcile/reports/
 src/reconcile/categorization/
+dashboard/streamlit_app.py
 ```
 
 Important package responsibilities:
@@ -356,8 +419,8 @@ Important package responsibilities:
 - `accounts/` owns account models and account-opening behavior.
 - `journal/` owns journal models, posting, validation, and reversals.
 - `projections/` owns derived account balance and rebuild behavior.
-- `reports/` owns trial balance, income statement, balance sheet, cash
-  flow, and CSV exports.
+- `reports/` owns trial balance, income statement, balance sheet, cash flow,
+  and CSV exports.
 - `imports/` owns bank CSV import, normalization, hashing, and duplicate
   detection.
 - `reconciliation/` owns cash movement extraction and exact/fuzzy/split
@@ -365,6 +428,31 @@ Important package responsibilities:
 - `categorization/` owns deterministic rules, corrections, and the local
   classifier.
 - `cli.py` owns command-line argument parsing and workflow coordination.
+- `dashboard/streamlit_app.py` owns the read-only local dashboard display.
+
+---
+
+## Event-sourced vs table-backed workflows
+
+Reconcile's accounting ledger is event-sourced today.
+
+Current event-sourced ledger actions:
+
+- `AccountOpened`
+- `JournalEntryPosted`
+- `JournalEntryReversed`
+
+Those events are stored in `ledger_events` and replayed in deterministic
+`event_sequence` order to rebuild accounting projections.
+
+Some MVP workflows are intentionally table-backed rather than event-sourced:
+
+- Bank statement imports write to bank import and bank transaction tables.
+- Reconciliation runs write to reconciliation tables.
+- Categorization corrections write to a category correction table.
+
+This keeps the MVP focused while preserving a clear path for future event types
+if the project grows.
 
 ---
 
@@ -372,46 +460,52 @@ Important package responsibilities:
 
 The test suite currently covers:
 
-- Package import smoke test
-- Money parsing and formatting
-- Account model validation
-- Journal model validation
-- SQLite schema creation
-- Event store behavior
-- Account opening
-- Journal posting
-- Account balance projections
-- Projection rebuilds
-- Trial balance reports
-- Income statement reports
-- Balance sheet reports
-- Journal reversals
-- Property-based accounting invariants
-- Bank CSV import
-- Bank duplicate detection
-- Ledger cash movement extraction
-- Exact reconciliation matching
-- Fuzzy reconciliation scoring
-- Split reconciliation matching
-- CLI workflows
-- Report exports
-- Rule-based categorization
-- Categorization corrections
-- Local categorization classifier behavior
-- Direct-method cash flow reporting
+- Package import smoke test.
+- Money parsing and formatting.
+- Account model validation.
+- Journal model validation.
+- SQLite schema creation.
+- Event store behavior.
+- Account opening.
+- Journal posting.
+- Account balance projections.
+- Projection rebuilds.
+- Trial balance reports.
+- Income statement reports.
+- Balance sheet reports.
+- Journal reversals.
+- Property-based accounting invariants.
+- Bank CSV import.
+- Bank duplicate detection.
+- Ledger cash movement extraction.
+- Exact reconciliation matching.
+- Fuzzy reconciliation scoring.
+- Split reconciliation matching.
+- CLI workflows.
+- Report exports.
+- Rule-based categorization.
+- Categorization corrections.
+- Local categorization classifier behavior.
+- Direct-method cash flow reporting.
+- Streamlit dashboard helper behavior.
+- GitHub Actions CI workflow behavior through CI execution.
 
 Standard validation commands:
 
-```bash
+```powershell
 python -m pytest
 python -m ruff check .
 ```
 
-Latest local Step 25 validation:
+Step 30 validation to run locally after applying this patch:
 
-```text
-python -m pytest        # 709 passed
-python -m ruff check .  # All checks passed
+```powershell
+python -m pytest tests/test_cash_flow_report.py
+python -m pytest
+python -m ruff check .
+python scripts/run_reconcile.py --help
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+git status
 ```
 
 ---
@@ -457,9 +551,20 @@ Implemented reports:
 - Balance sheet
 - Direct-method cash flow statement
 
-Reports read existing ledger projections and journal lines. They do not
-append events, rebuild projections, import files, run reconciliation, or
-mutate accounting tables.
+Reports read existing ledger projections and journal lines. They do not append
+events, rebuild projections, import files, run reconciliation, or mutate
+accounting tables.
+
+Cash-flow classification uses simple direct-method rules:
+
+- Revenue and expense counterparties classify as operating.
+- Accounts Receivable and similar customer receivables classify as operating.
+- Accounts Payable and similar vendor payables classify as operating.
+- Other non-cash asset counterparties classify as investing.
+- Ordinary liability and equity counterparties classify as financing.
+
+Reconcile does not implement a full AR/AP subledger, invoice workflow, bill-pay
+workflow, or indirect-method cash flow statement.
 
 ---
 
@@ -468,24 +573,24 @@ mutate accounting tables.
 Bank transactions use bank-sign convention:
 
 ```text
-Deposit / inflow     = positive amount
-Withdrawal / outflow = negative amount
+Deposit / inflow      = positive amount
+Withdrawal / outflow  = negative amount
 ```
 
 Ledger cash movements use bank-comparable convention:
 
 ```text
-Debit to Cash   = positive amount
+Debit to Cash    = positive amount
 Credit from Cash = negative amount
 ```
 
 Implemented reconciliation modes:
 
-- Exact matching
-- Fuzzy amount/date/description matching
-- Ambiguous candidate handling
-- Limited split matching for one bank transaction to two or three ledger
-  cash movements
+- Exact matching.
+- Fuzzy amount/date/description matching.
+- Ambiguous candidate handling.
+- Limited split matching for one bank transaction to two or three ledger cash
+  movements.
 
 Match records include:
 
@@ -512,61 +617,43 @@ Implemented categorization layers:
 4. Uncategorized
 ```
 
-The classifier is local-only, deterministic, standard-library based, and
-not persisted to disk.
+The classifier is local-only, deterministic, standard-library based, and not
+persisted to disk.
 
 Categorization does not mutate imported bank transaction rows.
 
 ---
 
-## Known accounting refinement before final polish
-
-The current direct-method cash flow classifier follows the Step 25 rule:
-
-```text
-Revenue and expense counterparties -> operating
-Non-cash asset counterparties      -> investing
-Liability counterparties           -> financing
-Equity counterparties              -> financing
-```
-
-That rule is simple and deterministic, but it creates one accounting
-refinement to address before the final release:
-
-> Accounts Receivable collections should usually be operating cash flow,
-> not investing cash flow.
-
-In the current sample output, a customer payment or receivable collection
-may appear as investing because Accounts Receivable is an asset account.
-Before the final documentation/dashboard polish, the cash flow
-classification should be refined so ordinary operating working-capital
-asset accounts, especially Accounts Receivable, classify as operating.
-
-This is not a ledger integrity issue. It is a cash-flow presentation
-refinement.
-
----
-
 ## Current limitations
 
-Current limitations are intentional while the project is still under
-development:
+Current limitations are intentional:
 
-- Streamlit dashboard is not implemented yet.
-- Dashboard report pages are not implemented yet.
-- Dashboard reconciliation and categorization review are not implemented
-  yet.
-- GitHub Actions CI is not implemented yet.
-- Manual reconciliation confirmation/rejection events are not implemented
-  yet.
-- Bank import currently writes directly to bank tables instead of using
-  bank import events.
-- Split reconciliation intentionally supports only two or three ledger
-  components.
-- Cash flow classification needs a final accounting refinement for
-  Accounts Receivable and similar operating working-capital accounts.
-- README and architecture docs need final polish after dashboard work
-  exists.
+- No payroll.
+- No tax engine.
+- No sales tax logic.
+- No income tax logic.
+- No inventory accounting.
+- No multi-currency.
+- No bank APIs.
+- No Plaid integration.
+- No external APIs.
+- No scraping.
+- No LLM dependencies.
+- No cloud database.
+- No production deployment requirement.
+- No authentication.
+- No user accounts.
+- No production multi-user workflow.
+- No full AR/AP subledger.
+- No invoice generation.
+- No bill-pay workflow.
+- No payment processing.
+- No real company data.
+- No real bank data.
+- No direct mutation of posted accounting history.
+- No manual reconciliation confirmation/rejection workflow yet.
+- No dashboard writeback yet.
+- No unlimited subset-sum reconciliation search.
 
 ---
 
@@ -600,61 +687,13 @@ development:
 - Step 23 — Rule-based categorization
 - Step 24 — Correction storage and local classifier
 - Step 25 — Direct-method cash flow report
+- Step 26 — Streamlit dashboard foundation
+- Step 27 — Dashboard report pages and event timeline
+- Step 28 — Dashboard reconciliation and categorization review
+- Step 29 — CI workflow
+- Step 30 — README and architecture documentation polish
 
 ### Remaining
-
-#### Step 26 — Streamlit dashboard foundation
-
-Planned:
-
-- Add Streamlit dependency.
-- Add dashboard shell.
-- Add database path selector or default demo database.
-- Add overview page.
-- Show high-level account balances and project status.
-- Keep dashboard logic thin.
-
-#### Step 27 — Dashboard report pages and event timeline
-
-Planned:
-
-- Trial balance page
-- Income statement page
-- Balance sheet page
-- Cash flow page
-- Event timeline page
-- Date or event-sequence selectors
-
-#### Step 28 — Dashboard reconciliation and categorization review
-
-Planned:
-
-- Bank transaction review
-- Reconciliation match review
-- Score and explanation display
-- Ambiguous candidate display
-- Categorization source and reason display
-
-#### Step 29 — CI workflow
-
-Planned:
-
-- Add GitHub Actions.
-- Run pytest.
-- Run ruff.
-- Confirm CI passes.
-
-#### Step 30 — README and architecture documentation polish
-
-Planned:
-
-- Polish README quickstart.
-- Update architecture docs.
-- Update event model docs.
-- Update accounting invariant docs.
-- Update reconciliation design docs.
-- Add screenshots if dashboard exists.
-- Make docs match actual behavior.
 
 #### Step 31 — Final portfolio cleanup
 
@@ -665,38 +704,9 @@ Planned:
 - Final CHANGELOG update.
 - Final CONTRIBUTING update.
 - Final smoke checks.
-- Final sample outputs.
+- Final sample output review.
 - Confirm no secrets or real data.
 - Mark project complete.
-
----
-
-## Non-goals
-
-The MVP does not include:
-
-- Payroll
-- Tax engine
-- Sales tax logic
-- Income tax logic
-- Inventory accounting
-- Multi-currency
-- Bank APIs
-- Plaid integration
-- External APIs
-- Scraping
-- LLM dependencies
-- Cloud database
-- Production deployment requirement
-- Authentication
-- User accounts
-- Full AR/AP subledger
-- Invoice generation
-- Payment processing
-- Real company data
-- Real bank data
-- Direct mutation of posted accounting history
-- Unlimited subset-sum reconciliation search
 
 ---
 
@@ -704,7 +714,7 @@ The MVP does not include:
 
 Typical validation loop:
 
-```bash
+```powershell
 python -m pytest
 python -m ruff check .
 git status
@@ -712,13 +722,10 @@ git status
 
 One completed build step should usually become one atomic commit.
 
-Recent commit message examples:
+Suggested Step 30 commit message:
 
 ```text
-Add report exports and sample outputs
-Add rule-based categorization
-Add categorization corrections and local classifier
-Add direct-method cash flow report
+Polish docs and refine cash flow classification
 ```
 
 ---
@@ -727,14 +734,14 @@ Add direct-method cash flow report
 
 This project should never include:
 
-- Real bank statements
-- Real customer data
-- Real company data
-- API credentials
-- Secrets
-- Private financial records
-- Pickled model files
-- Local generated SQLite databases
+- Real bank statements.
+- Real customer data.
+- Real company data.
+- API credentials.
+- Secrets.
+- Private financial records.
+- Pickled model files.
+- Local generated SQLite databases.
 
 All examples should use fake demo data only.
 
@@ -748,6 +755,9 @@ __pycache__/
 *.pkl
 *.joblib
 .env
+.streamlit/secrets.toml
+.coverage
+htmlcov/
 ```
 
 ---
@@ -767,3 +777,6 @@ docs/Reconcile_Project_State.md
 ```
 
 That file should be updated after every completed build step.
+
+[ci-badge]: https://github.com/nepounds/reconcile/actions/workflows/ci.yml/badge.svg
+[ci-workflow]: https://github.com/nepounds/reconcile/actions/workflows/ci.yml

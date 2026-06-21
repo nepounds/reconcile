@@ -5,11 +5,12 @@ Reconcile.
 
 ## Current implementation status
 
-Reconcile currently supports exact reconciliation, fuzzy reconciliation, and
-limited split reconciliation.
+Reconcile supports exact reconciliation, fuzzy reconciliation, limited split
+reconciliation, CSV export of reconciliation results, and read-only Streamlit
+review of reconciliation runs and matches.
 
-Exact reconciliation matches imported bank transactions to ledger cash
-movements using exact signed integer cents and exact transaction dates.
+Exact reconciliation matches imported bank transactions to ledger cash movements
+using exact signed integer cents and exact transaction dates.
 
 Fuzzy reconciliation adds configurable amount tolerance, date windows,
 description scoring, duplicate penalties, candidate scoring, and ambiguity
@@ -19,8 +20,8 @@ Split reconciliation matches one bank transaction to two or three ledger cash
 movements when the signed component amounts sum to the bank amount within the
 configured tolerance.
 
-Manual review UI, confirmation/rejection events, report exports, cash flow, and
-categorization are still future work.
+Manual confirmation/rejection and reconciliation writeback are still future
+work.
 
 ## Bank transaction sign convention
 
@@ -51,6 +52,8 @@ Rules:
 - Credit to Cash becomes a negative ledger cash movement.
 - Non-cash journal lines are not bank-comparable cash movements.
 - Ledger cash movement records include journal entry and line references.
+- Reversed original entries and reversal entries are excluded by default, with
+  an audit-inclusive option available in the extraction helper.
 
 ## Exact reconciliation
 
@@ -138,14 +141,14 @@ considered.
 Duplicate-flagged bank transactions receive a score penalty in fuzzy scoring.
 
 Duplicate-flagged bank transactions cannot be auto-matched by fuzzy
-reconciliation. They may become candidate, ambiguous, or unmatched records,
-but they are not linked to ledger movements automatically.
+reconciliation. They may become candidate, ambiguous, or unmatched records, but
+they are not linked to ledger movements automatically.
 
 Duplicate-flagged bank transactions also cannot be auto-matched by split
 reconciliation. Split candidates for duplicate-flagged bank rows may be stored
 as candidate records, but no ledger-link rows are created.
 
-## Fuzzy decision thresholds
+## Decision thresholds
 
 Default thresholds:
 
@@ -179,8 +182,8 @@ no candidates:
 
 ## Split reconciliation
 
-Split reconciliation evaluates one bank transaction against bounded
-combinations of ledger cash movements.
+Split reconciliation evaluates one bank transaction against bounded combinations
+of ledger cash movements.
 
 Implemented split scope:
 
@@ -201,8 +204,8 @@ A split candidate is considered only when:
 - The bank transaction and component movements have the same sign.
 - The signed sum of component amounts equals the bank amount within tolerance.
 - Every component movement is within the configured date window.
-- The component movements have not already been consumed by a split auto-match
-  in the same run.
+- The component movements have not already been consumed by a split auto-match in
+  the same run.
 
 Different-sign component combinations are rejected.
 
@@ -255,40 +258,7 @@ Split candidates are ordered deterministically by:
 4. Fewer components before more components.
 5. Stable component movement IDs.
 
-## Split decision thresholds
-
-Split reconciliation uses the same default threshold values as fuzzy
-reconciliation:
-
-```text
-auto_match_threshold = 95.0
-candidate_threshold = 80.0
-ambiguity_gap = 10.0
-```
-
-Decision rules:
-
-```text
-top score >= auto_match_threshold
-and gap between top and second candidate >= ambiguity_gap
-and bank transaction is not duplicate-flagged:
-    auto_matched
-
-top score >= auto_match_threshold
-and second candidate is too close:
-    ambiguous
-
-candidate_threshold <= top score < auto_match_threshold:
-    candidate
-
-top score < candidate_threshold:
-    unmatched
-
-no candidates:
-    unmatched
-```
-
-## Ledger-link behavior
+## Ledger-link rows
 
 Only auto-matched records create rows in
 `reconciliation_match_ledger_links`.
@@ -309,7 +279,7 @@ Candidate and ambiguous records do not consume ledger movements.
 For split reconciliation, every component movement in an auto-matched split is
 marked consumed for the rest of that run.
 
-## Explanation storage
+## Match explanation JSON
 
 Every reconciliation match stores JSON explanation data.
 
@@ -347,6 +317,21 @@ Split explanations include:
 - Top candidate summary.
 - Near candidate summary when applicable.
 
+## Dashboard review
+
+The Streamlit dashboard includes a Bank Reconciliation page.
+
+The dashboard can review reconciliation runs, match rows, explanation JSON, and
+linked ledger details. It is read-only. It does not run reconciliation, confirm
+matches, reject matches, import bank files, append events, or write ledger-link
+changes.
+
+## CSV export
+
+Reconciliation result CSV export is implemented through report export helpers.
+It exports stored reconciliation rows and their explanation JSON. Exporting is
+read-only.
+
 ## Mutation safety
 
 Reconciliation writes only to reconciliation tables:
@@ -366,8 +351,8 @@ It does not modify accounting projection tables.
 The following reconciliation features are not implemented yet:
 
 - Manual confirmation and rejection workflow.
-- Reconciliation review UI.
-- CSV export of reconciliation results.
-- Cash flow reporting.
+- Confirmation/rejection event workflow.
+- Dashboard writeback for review decisions.
+- Reconciliation writeback to ledger or bank rows.
 - Unlimited subset-sum matching.
 - Many bank transactions to one ledger movement.

@@ -10,11 +10,11 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 29 — Add CI workflow.
+Current step: Step 30 — Polish README and architecture docs.
 
-Status: Step 29 complete.
+Status: Step 30 complete.
 
-Approximate project completion: 95% to 97%.
+Approximate project completion: 96% to 98%.
 
 Current summary:
 
@@ -145,6 +145,10 @@ Current summary:
 * Step 29 CI checks out the repository, sets up Python 3.13, installs the package with dev dependencies, runs Ruff, and runs the full pytest suite.
 * Step 29 keeps CI simple with no matrix, deployment, caching, Streamlit launch job, coverage service, mypy, pre-commit, Docker, secrets, or local database requirement.
 * Step 29 left the README badge for Step 30 README polish.
+* Step 30 polished the architecture, event model, accounting invariant, reconciliation design, and step plan documentation.
+* Step 30 refined direct-method cash-flow classification so customer receivable collections and ordinary vendor payable payments classify as operating cash flow.
+* Step 30 added focused cash-flow tests for Accounts Receivable and Accounts Payable classification.
+* Step 30 did not mark the project complete and left final portfolio release cleanup for Step 31.
 * Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
 * Income statements support inclusive start and end dates.
 * Income statements include revenue and expense accounts only.
@@ -170,6 +174,58 @@ Current summary:
 * Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
 * Dashboard report pages and event timeline are implemented as read-only Streamlit pages.
 * Manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+
+Completed Step 30 files:
+
+```text
+README.md
+docs/Architecture.md
+docs/Event_Model.md
+docs/Accounting_Invariants.md
+docs/Reconciliation_Design.md
+docs/Step_Plan.md
+docs/Reconcile_Project_State.md
+src/reconcile/reports/cash_flow.py
+tests/test_cash_flow_report.py
+```
+
+Completed Step 30 summary:
+
+* Polished the architecture documentation so it describes the implemented local-first SQLite architecture rather than Step 0 planned behavior.
+* Updated event model documentation to distinguish implemented ledger events from table-backed MVP bank import, reconciliation, and categorization workflows.
+* Expanded accounting invariant documentation for double-entry rules, integer cents, expanded accounting equation behavior, projection rebuilds, reversals, and Hypothesis property tests.
+* Updated reconciliation design documentation to include implemented exact, fuzzy, split, CSV export, and read-only dashboard review behavior.
+* Updated the step plan so Steps 0 through 29 are complete, Step 30 is complete after validation, and Step 31 remains the final release cleanup step.
+* Refined direct-method cash-flow classification so Accounts Receivable/customer receivables classify as operating instead of investing.
+* Refined direct-method cash-flow classification so Accounts Payable/vendor payables classify as operating instead of financing.
+* Preserved existing behavior where other non-cash assets classify as investing and ordinary liabilities/equity classify as financing.
+* Added focused cash-flow tests for AR classifier behavior, AP classifier behavior, customer receivable collections, and vendor payable payments.
+* Kept Step 30 scoped to documentation polish and the small accounting refinement.
+* Did not add new dashboard pages, reconciliation writeback, categorization writeback, schema changes, new event types, new dependencies, deployment, screenshots, or final project-complete marking.
+
+Commands run for Step 30:
+
+```bash
+python -m py_compile /mnt/data/cash_flow.py /mnt/data/test_cash_flow_report.py
+python -m pytest tests/test_cash_flow_report.py
+python -m pytest
+python -m ruff check .
+python scripts/run_reconcile.py --help
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+git status
+```
+
+Results:
+
+```text
+python -m py_compile /mnt/data/cash_flow.py /mnt/data/test_cash_flow_report.py  # passed in sandbox for uploaded files
+python -m pytest tests/test_cash_flow_report.py  # run locally in the full repository
+python -m pytest                                # run locally in the full repository
+python -m ruff check .                          # run locally in the full repository
+python scripts/run_reconcile.py --help          # run locally in the full repository
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31  # run locally after demo database exists
+git status                                      # expected Step 30 files only
+```
 
 Completed Step 27 files:
 
@@ -983,7 +1039,7 @@ Completed Step 29 summary:
 * Did not add the README CI badge in Step 29; the reference-style badge is deferred to Step 30 README polish.
 * Did not commit a local SQLite database or generated private/local artifacts.
 * Local validation passed as reported.
-* GitHub Actions validation is pending until the branch is pushed and the Actions tab confirms the workflow passes.
+* GitHub Actions validation passed on GitHub after push.
 
 Commands run for Step 29:
 
@@ -1006,14 +1062,14 @@ workflow YAML readback  # printed `.github/workflows/ci.yml` successfully
 GitHub Actions result:
 
 ```text
-Pending until pushed and checked in GitHub Actions.
+Passed on GitHub Actions after push.
 ```
 
 Next planned step:
 
-Step 30 — Polish README and architecture docs.
+Step 31 — Final portfolio polish and release cleanup.
 
-Step 30 status: Not started.
+Step 31 status: Not started.
 
 ---
 
@@ -6110,7 +6166,7 @@ workflow YAML readback  # printed `.github/workflows/ci.yml` successfully
 GitHub Actions result:
 
 ```text
-Pending until pushed and checked in GitHub Actions.
+Passed on GitHub Actions after push.
 ```
 
 Definition of done:
@@ -6131,7 +6187,7 @@ Definition of done:
 * No engine behavior changed.
 * Project State is updated.
 * Git status only shows expected Step 29 files.
-* GitHub Actions pass remains to be confirmed after push.
+* GitHub Actions passed after push.
 
 Suggested commit message:
 

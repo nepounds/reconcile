@@ -11,6 +11,29 @@ from reconcile.exceptions import ValidationError
 VALID_ACCOUNT_TYPES = {"asset", "liability", "equity", "revenue", "expense"}
 VALID_SECTIONS = {"operating", "investing", "financing"}
 
+OPERATING_RECEIVABLE_TERMS = (
+    "accounts receivable",
+    "account receivable",
+    "receivables",
+    "receivable",
+    "customer receivable",
+    "trade receivable",
+    "ar",
+    "a/r",
+)
+OPERATING_PAYABLE_TERMS = (
+    "accounts payable",
+    "account payable",
+    "payables",
+    "payable",
+    "vendor payable",
+    "trade payable",
+    "ap",
+    "a/p",
+)
+OPERATING_RECEIVABLE_CODES = {"1100", "ar", "a/r"}
+OPERATING_PAYABLE_CODES = {"2000", "ap", "a/p"}
+
 
 def generate_cash_flow_statement(
     connection: sqlite3.Connection,
@@ -93,6 +116,52 @@ def cash_flow_totals(statement: dict[str, object]) -> dict[str, object]:
     )
 
 
+def _normalized_account_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    return value.strip().lower()
+
+
+def _account_matches_terms(
+    account_code: str | None,
+    account_name: str | None,
+    *,
+    codes: set[str],
+    terms: tuple[str, ...],
+) -> bool:
+    normalized_code = _normalized_account_text(account_code)
+    normalized_name = _normalized_account_text(account_name)
+
+    if normalized_code in codes:
+        return True
+
+    return any(term in normalized_name for term in terms)
+
+
+def _is_operating_receivable(
+    account_code: str | None,
+    account_name: str | None,
+) -> bool:
+    return _account_matches_terms(
+        account_code,
+        account_name,
+        codes=OPERATING_RECEIVABLE_CODES,
+        terms=OPERATING_RECEIVABLE_TERMS,
+    )
+
+
+def _is_operating_payable(
+    account_code: str | None,
+    account_name: str | None,
+) -> bool:
+    return _account_matches_terms(
+        account_code,
+        account_name,
+        codes=OPERATING_PAYABLE_CODES,
+        terms=OPERATING_PAYABLE_TERMS,
+    )
+
+
 def classify_cash_flow_section(
     counterparty_account_type: str,
     counterparty_account_code: str | None = None,
@@ -118,9 +187,24 @@ def classify_cash_flow_section(
 
     if account_type in {"revenue", "expense"}:
         return "operating"
+
     if account_type == "asset":
+        if _is_operating_receivable(
+            counterparty_account_code,
+            counterparty_account_name,
+        ):
+            return "operating"
         return "investing"
-    if account_type in {"liability", "equity"}:
+
+    if account_type == "liability":
+        if _is_operating_payable(
+            counterparty_account_code,
+            counterparty_account_name,
+        ):
+            return "operating"
+        return "financing"
+
+    if account_type == "equity":
         return "financing"
 
     raise ValidationError(f"Unsupported counterparty account type: {account_type}.")
@@ -436,6 +520,8 @@ def _cash_flow_row(
         section,
         str(counterparty["counterparty_account_type"]),
         multiple_counterparties,
+        account_code=str(counterparty["counterparty_account_code"]),
+        account_name=str(counterparty["counterparty_account_name"]),
     )
     return {
         "section": section,
@@ -464,8 +550,19 @@ def _classification_reason(
     section: str,
     account_type: str,
     multiple_counterparties: bool,
+    *,
+    account_code: str | None = None,
+    account_name: str | None = None,
 ) -> str:
-    reason = f"Classified as {section} because counterparty is {account_type}."
+    if section == "operating" and account_type == "asset":
+        reason = "Classified as operating because counterparty is receivable."
+    elif section == "operating" and account_type == "liability":
+        reason = "Classified as operating because counterparty is payable."
+    else:
+        reason = f"Classified as {section} because counterparty is {account_type}."
+
+    if account_code or account_name:
+        reason += " Classification used account code/name hints."
     if multiple_counterparties:
         reason += " Cash flow amount was proportionally allocated."
     return reason

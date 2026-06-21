@@ -1,219 +1,150 @@
 # Reconcile Event Model
 
-This document defines the planned MVP event model. Step 0 does not implement these events yet.
+This document describes the event model currently implemented in Reconcile and
+separates it from MVP workflow tables that are not event-sourced yet.
 
 ## Event store role
 
-The event store will be the source of truth. Projections and reports will be derived from events. Events should be loaded and replayed in deterministic `event_sequence` order.
+The `ledger_events` table is the source of truth for implemented ledger actions.
+Projection tables can be rebuilt by loading events in deterministic
+`event_sequence` order and applying each event to the read models.
 
-## Common event fields
+Events are append-only. Posted accounting history is not edited or deleted.
+Corrections use reversal events.
 
-Every event is planned to include:
+## `ledger_events`
+
+Each stored event has these fields:
 
 | Field | Purpose |
 | --- | --- |
-| `event_sequence` | Database-assigned ordering value. |
+| `event_sequence` | SQLite-assigned replay order. |
 | `event_id` | Stable unique event identifier. |
 | `event_type` | Event name, such as `JournalEntryPosted`. |
-| `event_version` | Version number for payload compatibility. |
+| `event_version` | Payload version. MVP events use version 1. |
 | `event_timestamp` | When the event was recorded. |
-| `effective_date` | Accounting or business date of the event. |
+| `effective_date` | Accounting or business date. |
 | `source` | Source such as demo, manual, import, or reversal. |
-| `actor` | Optional user/system actor. |
+| `actor` | Optional actor. |
 | `correlation_id` | Optional workflow grouping ID. |
-| `causation_id` | Optional prior event that caused this event. |
-| `payload_json` | JSON payload for replaying the event. |
+| `causation_id` | Optional prior event that caused this one. |
+| `payload_json` | JSON payload used for replay. |
 | `created_at` | Storage timestamp. |
 
-## Planned MVP event types
+## Event ordering
+
+Events replay by `event_sequence`, not timestamp. Timestamps can collide or be
+created out of order. The sequence number is the deterministic replay order.
+
+## Payload JSON
+
+Event payloads are JSON-compatible dictionaries. Money values use integer cents.
+Payloads contain enough data to rebuild the implemented accounting projections.
+
+Invalid business actions are rejected before an event is appended. For example,
+an unbalanced journal entry does not create a `JournalEntryPosted` event.
+
+## Implemented event types
 
 ### AccountOpened
 
 Records that an account was opened.
 
-Expected payload fields:
+Payload includes account identity, code, name, account type, normal balance,
+active status, open timestamp, and optional close timestamp.
 
-- `account_id`
-- `code`
-- `name`
-- `account_type`
-- `normal_balance`
-- `parent_account_code`, optional
-- `description`, optional
-- `is_active`
+Replay behavior:
 
-Replay expectation:
-
-- Create or restore the account projection as active.
-- Reject duplicate account codes before event append in service logic.
-
-### AccountClosed
-
-Records that an account was closed or marked inactive.
-
-Expected payload fields:
-
-- `account_id`
-- `code`
-- `closed_at`
-- `reason`, optional
-
-Replay expectation:
-
-- Mark the account projection inactive.
-- Preserve the account history.
+- inserts or restores the account projection
+- preserves account identity and normal-balance rules
+- rejects duplicate projection rows during application
 
 ### JournalEntryPosted
 
-Records that a balanced journal entry was posted.
+Records that a balanced double-entry journal entry was posted.
 
-Expected payload fields:
+Payload includes the journal entry header and all journal lines, including line
+IDs, account IDs, debit/credit side, amount cents, descriptions, and line order.
 
-- `journal_entry_id`
-- `entry_date`
-- `description`
-- `source`
-- `external_reference`, optional
-- `lines`, each containing:
-  - `line_id`
-  - `line_number`
-  - `account_id` or account code resolved before projection
-  - `side`
-  - `amount_cents`
-  - `description`, optional
+Replay behavior:
 
-Replay expectation:
-
-- Create journal entry and line projections.
-- Apply debits and credits to account-balance projections.
-- Preserve the original entry.
+- inserts the journal entry projection
+- inserts journal line projections
+- applies debit and credit activity to account-balance projections
 
 ### JournalEntryReversed
 
 Records that a posted journal entry was reversed.
 
-Expected payload fields:
+Payload includes the original journal entry ID, the reversal journal entry ID,
+the reversal date, reason, and reversing lines.
 
-- `original_journal_entry_id`
-- `reversal_journal_entry_id`
-- `reversal_date`
-- `reason`
-- `reversal_lines`
+Replay behavior:
 
-Replay expectation:
+- inserts the reversal journal entry projection
+- inserts reversal journal lines
+- marks the original entry with `reversed_by_entry_id`
+- marks the reversal entry with `reversal_of_entry_id`
+- applies the reversing debit/credit activity to account balances
 
-- Create reversal journal entry projection.
-- Mark original entry as reversed if the projection supports that status.
-- Apply reversing lines to balance projections.
-- Keep the original entry visible.
+Reversals preserve audit history. The original entry remains visible, and the
+reversal is a separate journal entry with opposite sides.
 
-### BankStatementImported
+## MVP table-backed workflows
 
-Records that a bank statement file was imported.
+Some implemented MVP features are stored in regular SQLite workflow tables
+instead of ledger events.
 
-Expected payload fields:
+### Bank imports
 
-- `import_id`
-- `source_name`
-- `file_name`
-- `file_hash`, optional
-- `row_count`
-- `transactions`, each containing:
-  - `bank_transaction_id`
-  - `transaction_date`
-  - `posted_date`, optional
-  - `description_raw`
-  - `description_normalized`, optional
-  - `amount_cents`
-  - `external_id`, optional
-  - `check_number`, optional
-  - `row_hash`
-  - `duplicate_group_id`, optional
+Bank imports currently write to:
 
-Replay expectation:
+- `bank_statement_imports`
+- `bank_transactions`
 
-- Store import metadata.
-- Store imported bank transactions.
-- Preserve raw descriptions.
-- Flag duplicates instead of deleting them.
+They are not event-sourced in the current implementation. Raw bank descriptions,
+normalized descriptions, signed integer amounts, row hashes, and duplicate flags
+are preserved in those tables.
 
-### ReconciliationRunCompleted
+### Reconciliation
 
-Records that a reconciliation run was completed.
+Reconciliation currently writes to:
 
-Expected payload fields:
+- `reconciliation_runs`
+- `reconciliation_matches`
+- `reconciliation_match_ledger_links`
 
-- `reconciliation_run_id`
-- `cash_account_id`
-- `statement_start_date`
-- `statement_end_date`
-- `started_at`
-- `completed_at`
-- `config`
-- `summary`
+Reconciliation runs and match decisions are table-backed in the MVP. They do not
+append ledger events and do not mutate ledger history.
 
-Replay expectation:
+### Categorization corrections
 
-- Store reconciliation run metadata.
-- Preserve configuration used for matching.
+Categorization corrections currently write to:
 
-### ReconciliationMatchConfirmed
+- `category_corrections`
 
-Records that a reconciliation match was confirmed.
+Corrections are append-only rows, but they are not `ledger_events` in the MVP.
+They affect categorization review, not financial ledger state.
 
-Expected payload fields:
+## Planned or future event types
 
-- `reconciliation_match_id`
-- `reconciliation_run_id`
-- `bank_transaction_id`
-- `ledger_movement_ids`
-- `match_type`
-- `score`
-- `amount_delta_cents`
-- `date_delta_days`, optional
-- `explanation`
-- `confirmed_by`, optional
+These event types are not implemented as ledger events yet:
 
-Replay expectation:
+- `AccountClosed`
+- `BankStatementImported`
+- `ReconciliationRunCompleted`
+- `ReconciliationMatchConfirmed`
+- `ReconciliationMatchRejected`
+- `CategorizationRuleCreated`
+- `CategorizationRuleUpdated`
+- `TransactionCategoryCorrected`
+- `ClassifierTrained`
+- `ReportSnapshotCreated`
 
-- Store or update match status as confirmed.
-- Link the bank transaction to the selected ledger cash movement or movements.
-- Do not reuse confirmed ledger movements in the same run.
+They are listed as future design possibilities, not current behavior.
 
-### ReconciliationMatchRejected
+## Versioning
 
-Records that a reconciliation candidate was rejected.
-
-Expected payload fields:
-
-- `reconciliation_match_id`
-- `reconciliation_run_id`
-- `bank_transaction_id`
-- `ledger_movement_ids`
-- `reason`
-- `rejected_by`, optional
-
-Replay expectation:
-
-- Mark the candidate as rejected.
-- Preserve the reason.
-
-## Event ordering
-
-Events will be replayed by `event_sequence`, not by timestamp alone. Timestamps can collide or arrive out of order. The sequence number is the deterministic replay order.
-
-## Payload expectations
-
-Event payloads should be JSON-compatible and contain enough information to rebuild projections. Payloads should avoid derived values unless those values are needed for audit or explanation.
-
-Money values in payloads should use integer cents.
-
-## Replay expectations
-
-Replay should be deterministic. Given the same event list in the same order, projections should rebuild to the same state.
-
-Invalid business actions should be rejected before an event is appended. For example, an unbalanced journal entry should not create a `JournalEntryPosted` event.
-
-## Versioning expectations
-
-MVP events will use `event_version = 1`. If a payload shape changes later, the version should increase and replay code should handle old versions intentionally.
+Current event payloads use `event_version = 1`. If a payload shape changes later,
+the version should increase and replay code should handle old versions
+intentionally.

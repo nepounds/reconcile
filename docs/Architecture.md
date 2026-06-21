@@ -1,101 +1,196 @@
 # Reconcile Architecture
 
-Reconcile is planned as a local-first accounting engine built around an append-only event log, SQLite storage, rebuildable projections, and thin user interfaces.
+Reconcile is a local-first Python accounting engine built around an append-only
+ledger event log, SQLite storage, rebuildable projections, point-in-time reports,
+explainable reconciliation, deterministic categorization, and a thin read-only
+Streamlit dashboard.
 
-This document describes planned architecture only. Step 0 does not implement code.
+The project is a portfolio/demo system. It is not production accounting software
+and does not claim cloud deployment, external bank integrations, authentication,
+or real-data support.
 
 ## Plain-English overview
 
-Reconcile will store accounting activity as events. Events describe what happened, such as an account being opened, a journal entry being posted, a journal entry being reversed, or a bank statement being imported.
+Reconcile stores core accounting activity as events. An event records something
+that happened, such as opening an account, posting a journal entry, or reversing
+a posted journal entry.
 
-The current state of the ledger will be calculated from those events. Account balances, journal views, reports, and reconciliation results are planned as derived state. They should be explainable from the event history.
+SQLite tables then serve two roles:
 
-## Event store as source of truth
+1. The append-only `ledger_events` table stores the ledger source of truth.
+2. Projection and workflow tables make the ledger easy to query, report, and
+   review locally.
 
-The event store will be the authoritative record of accounting activity.
+Reports and dashboard pages read from the SQLite database and existing package
+functions. They do not own accounting logic.
 
-Planned rules:
+## Local-first design
 
-- Events are append-only.
-- Events are ordered by `event_sequence`.
-- Events should have stable IDs.
-- Event payloads should contain enough data to replay the business action.
-- Financial state changes must happen through events.
-- Posted accounting history should not be edited or deleted.
+Reconcile runs locally with Python and SQLite.
 
-The planned SQLite table for this is `ledger_events`.
+The default generated demo database is:
 
-## Projections as rebuildable derived state
+```text
+exports/reconcile.db
+```
 
-Projections are planned read models built from events. Examples include:
+That database is local output and should not be committed. The committed demo
+data is fake CSV input under `examples/demo_company/`, plus fake sample CSV
+outputs under `examples/sample_output/`.
 
-- `accounts`
-- `journal_entries`
-- `journal_entry_lines`
-- `account_balances`
-- reconciliation result tables
+The local-first design keeps the project easy to clone, run, inspect, and test
+without secrets, network calls, hosted services, or customer data.
 
-A projection should be disposable. The project should eventually be able to clear projections and rebuild them by replaying events in `event_sequence` order.
+## SQLite storage
 
-This matters because it proves that reports are derived from the ledger history instead of from hidden balance edits.
+SQLite is used because it keeps setup simple while still supporting real schema
+design, constraints, joins, and deterministic tests.
 
-## Why corrections use reversal events
+Important table groups:
 
-Accounting corrections should preserve the audit trail. Reconcile will not edit a posted journal entry to make it look like the mistake never happened.
+- `ledger_events` stores append-only accounting events.
+- `accounts`, `journal_entries`, and `journal_entry_lines` are accounting
+  projections.
+- `account_balances` stores rebuildable balance projections.
+- `bank_statement_imports` and `bank_transactions` store imported fake bank CSV
+  data.
+- `reconciliation_runs`, `reconciliation_matches`, and
+  `reconciliation_match_ledger_links` store reconciliation workflow output.
+- `category_corrections` stores user category corrections for imported bank
+  rows.
 
-Instead, the planned correction flow is:
+## Append-only event store
 
-1. Keep the original posted journal entry.
-2. Create a reversal event.
-3. Create reversing journal lines that neutralize the original entry.
-4. Optionally post a corrected replacement entry later.
+The `ledger_events` table is the source of truth for implemented ledger actions.
+Events are loaded and replayed in deterministic `event_sequence` order.
 
-This keeps history visible and makes it easier to explain how a balance changed.
+Implemented ledger event types:
 
-## Why SQLite is used
+- `AccountOpened`
+- `JournalEntryPosted`
+- `JournalEntryReversed`
 
-SQLite is planned for the MVP because it is local, simple to set up, and good for a portfolio project. It avoids requiring a database server while still allowing real SQL schema design.
+Posted journal entries are not edited in place. Corrections use reversal events
+and reversing journal lines so the audit trail remains visible.
 
-SQLite also fits the local-first goal:
+## Projections
 
-- No cloud database required.
-- No external service required.
-- A demo database can be created locally.
-- Tests can use temporary local databases.
+Projections are derived tables used for fast reads and simple reports.
 
-A future project could migrate the schema to Postgres, but that is not part of the MVP.
+Current projections include:
 
-## Separation between core package, CLI, and dashboard
+- account rows
+- journal entry rows
+- journal line rows
+- account balances
 
-The planned package structure keeps business logic in `src/reconcile/`.
+Projection tables are disposable. They can be cleared and rebuilt by replaying
+`ledger_events` in `event_sequence` order. This proves that balances and journal
+views are derived from event history rather than hidden manual edits.
 
-The CLI should:
+## Projection rebuild
 
-- Parse arguments.
-- Validate paths and user options.
-- Call package services.
-- Return clear user-facing errors.
+The rebuild workflow clears derived tables and replays supported ledger events.
+It rebuilds accounts, journal entries, journal lines, reversal state, and account
+balances.
 
-The dashboard should:
+Bank import, reconciliation, and categorization tables are MVP workflow tables.
+They are not currently rebuilt from ledger events.
 
-- Display reports and reconciliation results.
-- Show event history and explanations.
-- Call tested package functions or read safe projections.
-- Avoid owning accounting or reconciliation logic.
+## Report generation
 
-This keeps the core engine testable without needing a terminal UI or Streamlit app.
+Reports are read-only package functions. They do not append events, rebuild
+projections, write files, print, or mutate SQLite state.
+
+Implemented reports:
+
+- Trial balance
+- Income statement
+- Balance sheet
+- Direct-method cash flow
+
+The cash flow report uses direct-method cash movement rules. Step 30 refined the
+simple classification logic so customer receivable collections and ordinary
+vendor payable payments classify as operating cash flow.
+
+## Bank import and reconciliation
+
+Bank CSV import stores fake/demo bank statements directly in bank tables. It
+preserves raw descriptions, normalized descriptions, signed integer-cent amounts,
+row hashes, and duplicate flags.
+
+Reconciliation compares imported bank transactions to ledger cash movements
+extracted from cash-account journal lines.
+
+Implemented reconciliation modes:
+
+- exact amount/date matching
+- fuzzy amount/date/description scoring
+- limited split matching for two or three ledger movements
+
+Reconciliation writes only to reconciliation tables and stores explanation JSON
+for review. It does not mutate ledger history.
+
+Manual match confirmation/rejection is future work.
+
+## Categorization
+
+Categorization is local and explainable.
+
+Implemented behavior:
+
+- deterministic rule-based categorization
+- append-only correction storage
+- optional standard-library local classifier trained from corrections
+
+The classifier is not an external service and does not use LLM behavior.
+
+## Streamlit dashboard
+
+`dashboard/streamlit_app.py` is a thin read-only local dashboard.
+
+Implemented pages:
+
+- Overview
+- Trial Balance
+- Income Statement
+- Balance Sheet
+- Cash Flow
+- Event Timeline
+- Bank Reconciliation
+- Categorization Review
+
+The dashboard reads from SQLite and existing package functions. It does not
+import bank files, run reconciliation, rebuild projections, write category
+corrections, confirm/reject matches, train models, or write exports.
+
+## CLI
+
+The CLI lives in `src/reconcile/cli.py` with a thin script wrapper at
+`scripts/run_reconcile.py`.
+
+The CLI handles local demo setup, projection rebuilds, reports, bank import,
+reconciliation runs, and report exports. Business logic stays inside the package
+modules.
+
+## CI
+
+GitHub Actions runs Ruff and the full pytest suite on pushes and pull requests.
+The CI workflow is intentionally simple: no deployment, coverage service, mypy,
+Docker, caching, secrets, or Streamlit launch job.
 
 ## Scope boundaries
 
-The MVP will focus on:
+Reconcile intentionally excludes:
 
-- Event-sourced ledger mechanics.
-- Double-entry journal posting.
-- Reversals.
-- Rebuildable projections.
-- Trial balance, income statement, and balance sheet.
-- Fake/demo bank CSV import.
-- Explainable reconciliation.
-- Tests, including property-based accounting invariant tests.
-
-The MVP will not include payroll, tax filing, inventory accounting, bank APIs, Plaid, real company data, real bank data, authentication, production deployment, or LLM behavior.
+- payroll
+- tax filing or tax calculation
+- bank APIs and Plaid
+- real bank data or real company data
+- authentication and user accounts
+- production multi-user workflows
+- full AR/AP subledgers
+- invoice and bill-pay workflows
+- dashboard writeback
+- manual reconciliation confirmation/rejection
+- LLM behavior

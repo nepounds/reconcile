@@ -25,7 +25,8 @@ ACCOUNT_DEFINITIONS = [
     ("acct-checking", "1010", "Operating Checking", "asset", "debit"),
     ("acct-ar", "1100", "Accounts Receivable", "asset", "debit"),
     ("acct-equipment", "1500", "Equipment", "asset", "debit"),
-    ("acct-loan", "2000", "Bank Loan", "liability", "credit"),
+    ("acct-ap", "2000", "Accounts Payable", "liability", "credit"),
+    ("acct-loan", "2100", "Bank Loan", "liability", "credit"),
     ("acct-equity", "3000", "Owner Equity", "equity", "credit"),
     ("acct-revenue", "4000", "Service Revenue", "revenue", "credit"),
     ("acct-software", "5100", "Software Expense", "expense", "debit"),
@@ -115,6 +116,28 @@ def test_classifies_non_cash_asset_counterparty_as_investing() -> None:
     assert classify_cash_flow_section("asset") == "investing"
 
 
+def test_classifies_accounts_receivable_counterparty_as_operating() -> None:
+    assert (
+        classify_cash_flow_section(
+            "asset",
+            counterparty_account_code="1100",
+            counterparty_account_name="Accounts Receivable",
+        )
+        == "operating"
+    )
+
+
+def test_classifies_accounts_payable_counterparty_as_operating() -> None:
+    assert (
+        classify_cash_flow_section(
+            "liability",
+            counterparty_account_code="2000",
+            counterparty_account_name="Accounts Payable",
+        )
+        == "operating"
+    )
+
+
 def test_classifies_liability_counterparty_as_financing() -> None:
     assert classify_cash_flow_section("liability") == "financing"
 
@@ -192,6 +215,44 @@ def test_service_revenue_received_in_cash_is_operating_inflow(
     totals = cash_flow_totals(statement)
     assert totals["operating_cash_flow_cents"] == 20_000
     assert totals["net_cash_change_cents"] == 20_000
+
+
+def test_accounts_receivable_collection_is_operating_inflow(
+    tmp_path: Path,
+) -> None:
+    with _connection(tmp_path) as connection:
+        _post(
+            connection,
+            "JE-001",
+            date(2026, 1, 10),
+            "Collect customer receivable",
+            [("acct-cash", "debit", 25_000), ("acct-ar", "credit", 25_000)],
+        )
+        statement = _statement(connection)
+
+    totals = cash_flow_totals(statement)
+    assert totals["operating_cash_flow_cents"] == 25_000
+    assert totals["investing_cash_flow_cents"] == 0
+    assert totals["net_cash_change_cents"] == 25_000
+
+
+def test_accounts_payable_payment_is_operating_outflow(
+    tmp_path: Path,
+) -> None:
+    with _connection(tmp_path) as connection:
+        _post(
+            connection,
+            "JE-001",
+            date(2026, 1, 12),
+            "Pay vendor payable",
+            [("acct-ap", "debit", 12_000), ("acct-cash", "credit", 12_000)],
+        )
+        statement = _statement(connection)
+
+    totals = cash_flow_totals(statement)
+    assert totals["operating_cash_flow_cents"] == -12_000
+    assert totals["financing_cash_flow_cents"] == 0
+    assert totals["net_cash_change_cents"] == -12_000
 
 
 def test_equipment_purchase_with_cash_is_investing_outflow(
