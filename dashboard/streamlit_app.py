@@ -6,7 +6,7 @@ import json
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from reconcile.categorization.rules import (
     categorize_transaction,
@@ -65,6 +65,7 @@ TABLE_NAMES = (
     "reconciliation_matches",
     "category_corrections",
 )
+TABLE_NAME_SET = frozenset(TABLE_NAMES)
 
 EVENT_TIMELINE_COLUMNS = (
     "event_sequence",
@@ -97,6 +98,46 @@ SETUP_COMMANDS = "\n".join(SETUP_COMMAND_LINES)
 
 ReportRow = dict[str, object]
 ReportResult = dict[str, object]
+
+
+def _object_to_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(f"{field_name} must be an integer")
+    return value
+
+
+def _object_to_bool(value: object, field_name: str) -> bool | None:
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValidationError(f"{field_name} must be a boolean or None")
+    return value
+
+
+def _object_to_str_list(value: object, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list | tuple):
+        return [str(item) for item in value]
+    raise ValidationError(f"{field_name} must be a list or tuple")
+
+
+def _report_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def _report_rows(value: object) -> list[ReportRow]:
+    if not isinstance(value, list):
+        return []
+    return [dict(row) for row in value if isinstance(row, dict)]
+
+
+def _metric_value(value: object) -> str | int | float | None:
+    if value is None or isinstance(value, str | int | float):
+        return value
+    return str(value)
 
 
 def database_exists(db_path: str | Path) -> bool:
@@ -146,16 +187,20 @@ def validate_as_of_date(as_of_date: date) -> None:
         raise ValidationError("as_of_date must be a date")
 
 
-def rows_to_display_rows(rows: list[ReportRow]) -> list[ReportRow]:
+def rows_to_display_rows(rows: object) -> list[ReportRow]:
     """Convert report rows with cent fields into display rows."""
     display_rows = []
 
-    for row in rows:
+    for row in _report_rows(rows):
         display_row = dict(row)
         for key, value in row.items():
             if key.endswith("_cents"):
                 display_key = key.removesuffix("_cents")
-                cents = int(value) if value is not None else None
+                cents = (
+                    _object_to_int(value, key)
+                    if value is not None
+                    else None
+                )
                 display_row[display_key] = format_cents_for_dashboard(cents)
                 display_row.pop(key, None)
         display_rows.append(display_row)
@@ -180,7 +225,7 @@ def _first_existing_int(
     """Return the first available integer value from possible report keys."""
     value = _first_existing_value(values, keys)
     if value is not None:
-        return int(value)
+        return _object_to_int(value, keys[0])
 
     available_keys = ", ".join(sorted(values))
     expected_keys = ", ".join(keys)
@@ -321,13 +366,22 @@ def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
+def _validate_dashboard_table_name(table_name: str) -> str:
+    if table_name not in TABLE_NAME_SET:
+        raise ValidationError(f"Unsupported dashboard table name: {table_name}")
+    return table_name
+
+
 def _count_table(connection: sqlite3.Connection, table_name: str) -> int:
-    if not _table_exists(connection, table_name):
+    clean_table_name = _validate_dashboard_table_name(table_name)
+
+    if not _table_exists(connection, clean_table_name):
         return 0
 
-    row = connection.execute(
-        f"SELECT COUNT(*) AS row_count FROM {table_name}"
-    ).fetchone()
+    query = (
+        f"SELECT COUNT(*) AS row_count FROM {clean_table_name}"  # noqa: S608
+    )
+    row = connection.execute(query).fetchone()
     return int(row["row_count"])
 
 
@@ -397,7 +451,9 @@ def load_income_statement_report(
                 end_date=end_date,
             )
             rows = _extract_report_rows(statement)
-            row_totals = income_statement_totals(rows)
+            row_totals = income_statement_totals(
+                cast("list[dict[str, int | str]]", rows)
+            )
             totals = dict(statement) if isinstance(statement, dict) else {}
             totals.update(row_totals)
         finally:
@@ -527,7 +583,7 @@ def load_event_timeline(db_path: str | Path) -> list[ReportRow]:
 def load_trial_balance_preview(db_path: str | Path) -> list[ReportRow]:
     """Load a small trial balance preview from an existing database."""
     report = load_trial_balance_report(db_path)
-    rows = report["rows"] if report["available"] else []
+    rows = _report_rows(report.get("rows")) if report["available"] else []
 
     preview_rows = []
     for row in rows[:10]:
@@ -537,16 +593,22 @@ def load_trial_balance_preview(db_path: str | Path) -> list[ReportRow]:
                 "name": row["account_name"],
                 "type": row["account_type"],
                 "debit_total": format_cents_for_dashboard(
-                    int(row["debit_total_cents"])
+                    _object_to_int(row["debit_total_cents"], "debit_total_cents")
                 ),
                 "credit_total": format_cents_for_dashboard(
-                    int(row["credit_total_cents"])
+                    _object_to_int(row["credit_total_cents"], "credit_total_cents")
                 ),
                 "ending_debit": format_cents_for_dashboard(
-                    int(row["ending_debit_balance_cents"])
+                    _object_to_int(
+                        row["ending_debit_balance_cents"],
+                        "ending_debit_balance_cents",
+                    )
                 ),
                 "ending_credit": format_cents_for_dashboard(
-                    int(row["ending_credit_balance_cents"])
+                    _object_to_int(
+                        row["ending_credit_balance_cents"],
+                        "ending_credit_balance_cents",
+                    )
                 ),
             }
         )
@@ -559,12 +621,12 @@ def _load_trial_balance_status(db_path: str | Path) -> bool | None:
     if not report["available"]:
         return None
 
-    rows = report["rows"]
+    rows = _report_rows(report.get("rows"))
     if not rows:
         return None
 
-    totals = report["totals"]
-    return bool(totals["is_balanced"])
+    totals = _report_dict(report.get("totals"))
+    return _object_to_bool(totals.get("is_balanced"), "is_balanced")
 
 
 def _load_cash_ending_balance(db_path: str | Path) -> int | None:
@@ -782,8 +844,10 @@ def _load_reconciliation_links(
         return []
 
     placeholders = ", ".join("?" for _ in match_ids)
-    rows = connection.execute(
-        f"""
+    where_clause = (
+        f"WHERE rll.reconciliation_match_id IN ({placeholders})"  # noqa: S608
+    )
+    query = """
         SELECT
             rll.reconciliation_match_id,
             rll.journal_entry_id,
@@ -800,14 +864,13 @@ def _load_reconciliation_links(
           ON jel.line_id = rll.journal_entry_line_id
         LEFT JOIN accounts AS a
           ON a.account_id = jel.account_id
-        WHERE rll.reconciliation_match_id IN ({placeholders})
+        """ + where_clause + """
         ORDER BY
             rll.reconciliation_match_id ASC,
             rll.journal_entry_id ASC,
             COALESCE(rll.journal_entry_line_id, '') ASC
-        """,
-        match_ids,
-    ).fetchall()
+        """
+    rows = connection.execute(query, match_ids).fetchall()
 
     return [dict(row) for row in rows]
 
@@ -1146,7 +1209,7 @@ def load_categorization_review_rows(
                 ],
                 "amount_cents": transaction["amount_cents"],
                 "amount": format_cents_for_dashboard(
-                    int(transaction["amount_cents"])
+                    _object_to_int(transaction["amount_cents"], "amount_cents")
                 ),
                 "duplicate_group_id": transaction.get("duplicate_group_id"),
                 "category": category,
@@ -1289,9 +1352,10 @@ def _metric_cents(
     columns: Any,
     index: int,
     label: str,
-    values: dict[str, object],
+    values: object,
     keys: tuple[str, ...],
 ) -> None:
+    values = _report_dict(values)
     columns[index].metric(
         label,
         format_cents_for_dashboard(_first_existing_int(values, keys)),
@@ -1302,11 +1366,15 @@ def _metric_bool(
     columns: Any,
     index: int,
     label: str,
-    values: dict[str, object],
+    values: object,
     keys: tuple[str, ...],
 ) -> None:
+    values = _report_dict(values)
     value = _first_existing_value(values, keys)
-    columns[index].metric(label, format_bool_status(bool(value)))
+    columns[index].metric(
+        label,
+        format_bool_status(_object_to_bool(value, keys[0])),
+    )
 
 
 def render_overview(db_path: str | Path) -> None:
@@ -1325,33 +1393,38 @@ def render_overview(db_path: str | Path) -> None:
     st.success(f"Connected to local database: `{db_path}`")
 
     metric_columns = st.columns(4)
-    metric_columns[0].metric("Ledger events", summary["ledger_events"])
-    metric_columns[1].metric("Accounts", summary["accounts"])
+    metric_columns[0].metric("Ledger events", _metric_value(summary["ledger_events"]))
+    metric_columns[1].metric("Accounts", _metric_value(summary["accounts"]))
     metric_columns[2].metric(
         "Journal entries",
-        summary["posted_journal_entries"],
+        _metric_value(summary["posted_journal_entries"]),
     )
     metric_columns[3].metric(
         "Bank transactions",
-        summary["imported_bank_transactions"],
+        _metric_value(summary["imported_bank_transactions"]),
     )
 
     second_metric_columns = st.columns(4)
     second_metric_columns[0].metric(
         "Reconciliation runs",
-        summary["reconciliation_runs"],
+        _metric_value(summary["reconciliation_runs"]),
     )
     second_metric_columns[1].metric(
         "Trial balance balanced",
-        format_bool_status(summary["trial_balance_balanced"]),
+        format_bool_status(
+            _object_to_bool(
+                summary["trial_balance_balanced"],
+                "trial_balance_balanced",
+            )
+        ),
     )
     second_metric_columns[2].metric(
         "Cash ending balance",
-        summary["cash_ending_balance"],
+        _metric_value(summary["cash_ending_balance"]),
     )
     second_metric_columns[3].metric(
         "Cash flow tie",
-        summary["cash_flow_tie_status"],
+        _metric_value(summary["cash_flow_tie_status"]),
     )
 
     st.subheader("Database table counts")
@@ -1380,8 +1453,8 @@ def render_trial_balance_page(db_path: str | Path) -> None:
         _render_report_error(st, report)
         return
 
-    rows = report["rows"]
-    totals = report["totals"]
+    rows = _report_rows(report.get("rows"))
+    totals = _report_dict(report.get("totals"))
 
     if not rows:
         st.info("No trial balance rows are available yet.")
@@ -1421,16 +1494,22 @@ def render_trial_balance_page(db_path: str | Path) -> None:
                 "account_type": row["account_type"],
                 "normal_balance": row["normal_balance"],
                 "debit_total": format_cents_for_dashboard(
-                    int(row["debit_total_cents"])
+                    _object_to_int(row["debit_total_cents"], "debit_total_cents")
                 ),
                 "credit_total": format_cents_for_dashboard(
-                    int(row["credit_total_cents"])
+                    _object_to_int(row["credit_total_cents"], "credit_total_cents")
                 ),
                 "ending_debit_balance": format_cents_for_dashboard(
-                    int(row["ending_debit_balance_cents"])
+                    _object_to_int(
+                        row["ending_debit_balance_cents"],
+                        "ending_debit_balance_cents",
+                    )
                 ),
                 "ending_credit_balance": format_cents_for_dashboard(
-                    int(row["ending_credit_balance_cents"])
+                    _object_to_int(
+                        row["ending_credit_balance_cents"],
+                        "ending_credit_balance_cents",
+                    )
                 ),
             }
         )
@@ -1454,8 +1533,8 @@ def render_income_statement_page(db_path: str | Path) -> None:
 
     st.caption(f"Selected range: {start_date.isoformat()} to {end_date.isoformat()}")
 
-    rows = report["rows"]
-    totals = report["totals"]
+    rows = _report_rows(report.get("rows"))
+    totals = _report_dict(report.get("totals"))
 
     metric_columns = st.columns(3)
     _metric_cents(
@@ -1507,8 +1586,8 @@ def render_balance_sheet_page(db_path: str | Path) -> None:
 
     st.caption(f"Selected as-of date: {as_of_date.isoformat()}")
 
-    rows = report["rows"]
-    totals = report["totals"]
+    rows = _report_rows(report.get("rows"))
+    totals = _report_dict(report.get("totals"))
 
     metric_columns = st.columns(5)
     _metric_cents(
@@ -1568,8 +1647,8 @@ def render_cash_flow_page(db_path: str | Path) -> None:
 
     st.caption(f"Selected range: {start_date.isoformat()} to {end_date.isoformat()}")
 
-    rows = report["rows"]
-    totals = report["totals"]
+    rows = _report_rows(report.get("rows"))
+    totals = _report_dict(report.get("totals"))
 
     metric_columns = st.columns(4)
     _metric_cents(
@@ -1688,7 +1767,7 @@ def render_bank_reconciliation_page(db_path: str | Path) -> None:
         st.info(str(review["message"]))
         return
 
-    runs = list(review["runs"])
+    runs = _report_rows(review.get("runs"))
     if not runs:
         st.info("No reconciliation runs are available yet.")
         return
@@ -1723,7 +1802,7 @@ def render_bank_reconciliation_page(db_path: str | Path) -> None:
         with st.expander("Run configuration JSON"):
             st.json(selected_run.get("config") or {})
 
-    matches = list(review["matches"])
+    matches = _report_rows(review.get("matches"))
     if not matches:
         st.info("No reconciliation matches are available for this run yet.")
         return
@@ -1750,10 +1829,16 @@ def render_bank_reconciliation_page(db_path: str | Path) -> None:
                 "date_delta_days": match["date_delta_days"],
                 "ledger_link_count": match["ledger_link_count"],
                 "journal_entry_ids": ", ".join(
-                    match["matched_ledger_journal_entry_ids"]
+                    _object_to_str_list(
+                        match["matched_ledger_journal_entry_ids"],
+                        "matched_ledger_journal_entry_ids",
+                    )
                 ),
                 "journal_line_ids": ", ".join(
-                    match["matched_ledger_journal_line_ids"]
+                    _object_to_str_list(
+                        match["matched_ledger_journal_line_ids"],
+                        "matched_ledger_journal_line_ids",
+                    )
                 ),
                 "explanation_summary": match["explanation_summary"],
             }
@@ -1761,7 +1846,7 @@ def render_bank_reconciliation_page(db_path: str | Path) -> None:
     st.table(display_rows)
 
     st.subheader("Match explanations and ledger links")
-    links_by_match = _links_by_match(list(review["ledger_links"]))
+    links_by_match = _links_by_match(_report_rows(review.get("ledger_links")))
     for match in matches:
         match_id = str(match["reconciliation_match_id"])
         label = f"{match_id} — {match['match_status']}"
@@ -1797,38 +1882,38 @@ def render_categorization_review_page(db_path: str | Path) -> None:
         st.info(str(review["message"]))
         return
 
-    summary = review["summary"]
+    summary = _report_dict(review.get("summary"))
     metric_columns = st.columns(4)
     metric_columns[0].metric(
         "Bank transactions",
-        summary["total_bank_transactions"],
+        _metric_value(summary["total_bank_transactions"]),
     )
-    metric_columns[1].metric("Categorized", summary["categorized_count"])
+    metric_columns[1].metric("Categorized", _metric_value(summary["categorized_count"]))
     metric_columns[2].metric(
         "Uncategorized",
-        summary["uncategorized_count"],
+        _metric_value(summary["uncategorized_count"]),
     )
     metric_columns[3].metric(
         "Duplicate flagged",
-        summary["duplicate_flagged_count"],
+        _metric_value(summary["duplicate_flagged_count"]),
     )
 
     second_metric_columns = st.columns(4)
-    second_metric_columns[0].metric("Rule", summary["rule_based_count"])
+    second_metric_columns[0].metric("Rule", _metric_value(summary["rule_based_count"]))
     second_metric_columns[1].metric(
         "Correction",
-        summary["correction_based_count"],
+        _metric_value(summary["correction_based_count"]),
     )
     second_metric_columns[2].metric(
         "Classifier",
-        summary["classifier_based_count"],
+        _metric_value(summary["classifier_based_count"]),
     )
     second_metric_columns[3].metric(
         "Classifier used",
-        format_bool_status(bool(summary["classifier_used"])),
+        format_bool_status(bool(summary.get("classifier_used"))),
     )
 
-    rows = list(review["rows"])
+    rows = _report_rows(review.get("rows"))
     if not rows:
         st.info("No imported bank transactions are available yet.")
         return

@@ -9,7 +9,7 @@ import sys
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from reconcile.accounts.models import Account
 from reconcile.accounts.service import open_account
@@ -284,10 +284,10 @@ def _handle_report_trial_balance(args: argparse.Namespace) -> int:
                     str(row["account_code"]),
                     str(row["account_name"]),
                     str(row["account_type"]),
-                    format_cents(row["debit_total_cents"]),
-                    format_cents(row["credit_total_cents"]),
-                    format_cents(row["ending_debit_balance_cents"]),
-                    format_cents(row["ending_credit_balance_cents"]),
+                    format_cents(_int_value(row["debit_total_cents"])),
+                    format_cents(_int_value(row["credit_total_cents"])),
+                    format_cents(_int_value(row["ending_debit_balance_cents"])),
+                    format_cents(_int_value(row["ending_credit_balance_cents"])),
                 ]
             )
         )
@@ -307,10 +307,10 @@ def _handle_report_trial_balance(args: argparse.Namespace) -> int:
     )
 
     print("Totals")
-    print(f"Debit totals: {format_cents(total_debits)}")
-    print(f"Credit totals: {format_cents(total_credits)}")
-    print(f"Ending debit balances: {format_cents(ending_debits)}")
-    print(f"Ending credit balances: {format_cents(ending_credits)}")
+    print(f"Debit totals: {format_cents(_int_value(total_debits))}")
+    print(f"Credit totals: {format_cents(_int_value(total_credits))}")
+    print(f"Ending debit balances: {format_cents(_int_value(ending_debits))}")
+    print(f"Ending credit balances: {format_cents(_int_value(ending_credits))}")
     print(f"Balanced: {totals['is_balanced']}")
     return 0
 
@@ -327,30 +327,30 @@ def _handle_report_income_statement(args: argparse.Namespace) -> int:
         )
 
     print(f"Income Statement: {start_date.isoformat()} to {end_date.isoformat()}")
-    print(f"Total revenue: {format_cents(report['total_revenue_cents'])}")
-    print(f"Total expenses: {format_cents(report['total_expenses_cents'])}")
-    print(f"Net income: {format_cents(report['net_income_cents'])}")
+    print(f"Total revenue: {format_cents(_int_value(report['total_revenue_cents']))}")
+    print(f"Total expenses: {format_cents(_int_value(report['total_expenses_cents']))}")
+    print(f"Net income: {format_cents(_int_value(report['net_income_cents']))}")
 
-    for row in report.get("revenue_accounts", []):
+    for row in _dict_rows(report.get("revenue_accounts")):
         print(
             " | ".join(
                 [
                     str(row.get("account_code", "")),
                     str(row.get("account_name", "")),
                     "revenue",
-                    format_cents(row.get("amount_cents", 0)),
+                    format_cents(_int_value(row.get("amount_cents", 0))),
                 ]
             )
         )
 
-    for row in report.get("expense_accounts", []):
+    for row in _dict_rows(report.get("expense_accounts")):
         print(
             " | ".join(
                 [
                     str(row.get("account_code", "")),
                     str(row.get("account_name", "")),
                     "expense",
-                    format_cents(row.get("amount_cents", 0)),
+                    format_cents(_int_value(row.get("amount_cents", 0))),
                 ]
             )
         )
@@ -365,17 +365,20 @@ def _handle_report_balance_sheet(args: argparse.Namespace) -> int:
         report = generate_balance_sheet(connection, as_of_date=as_of_date)
 
     print(f"Balance Sheet: {as_of_date.isoformat()}")
-    print(f"Total assets: {format_cents(report['total_assets_cents'])}")
-    print(f"Total liabilities: {format_cents(report['total_liabilities_cents'])}")
-    print(f"Total equity: {format_cents(report['total_equity_cents'])}")
+    print(f"Total assets: {format_cents(_int_value(report['total_assets_cents']))}")
+    print(
+        "Total liabilities: "
+        f"{format_cents(_int_value(report['total_liabilities_cents']))}"
+    )
+    print(f"Total equity: {format_cents(_int_value(report['total_equity_cents']))}")
     print(
         "Total liabilities and equity: "
-        f"{format_cents(report['total_liabilities_and_equity_cents'])}"
+        f"{format_cents(_int_value(report['total_liabilities_and_equity_cents']))}"
     )
     print(f"Balanced: {report['is_balanced']}")
 
     for section_name in ("assets", "liabilities", "equity"):
-        for row in report.get(section_name, []):
+        for row in _dict_rows(report.get(section_name)):
             amount = row.get("amount_cents", row.get("balance_cents", 0))
             print(
                 " | ".join(
@@ -383,7 +386,7 @@ def _handle_report_balance_sheet(args: argparse.Namespace) -> int:
                         section_name,
                         str(row.get("account_code", "")),
                         str(row.get("account_name", "")),
-                        format_cents(amount),
+                        format_cents(_int_value(amount)),
                     ]
                 )
             )
@@ -403,24 +406,27 @@ def _handle_report_cash_flow(args: argparse.Namespace) -> int:
             cash_account_id=args.cash_account_id,
         )
 
-    totals = statement["totals"]
+    totals = _dict_value(statement["totals"], "totals")
 
     print(f"Cash Flow Statement: {start_date.isoformat()} to {end_date.isoformat()}")
     print(
         "Operating cash flow: "
-        f"{format_cents(totals['operating_cash_flow_cents'])}"
+        f"{format_cents(_int_value(totals['operating_cash_flow_cents']))}"
     )
     print(
         "Investing cash flow: "
-        f"{format_cents(totals['investing_cash_flow_cents'])}"
+        f"{format_cents(_int_value(totals['investing_cash_flow_cents']))}"
     )
     print(
         "Financing cash flow: "
-        f"{format_cents(totals['financing_cash_flow_cents'])}"
+        f"{format_cents(_int_value(totals['financing_cash_flow_cents']))}"
     )
-    print(f"Net cash change: {format_cents(totals['net_cash_change_cents'])}")
-    print(f"Beginning cash: {format_cents(totals['beginning_cash_cents'])}")
-    print(f"Ending cash: {format_cents(totals['ending_cash_cents'])}")
+    print(
+        "Net cash change: "
+        f"{format_cents(_int_value(totals['net_cash_change_cents']))}"
+    )
+    print(f"Beginning cash: {format_cents(_int_value(totals['beginning_cash_cents']))}")
+    print(f"Ending cash: {format_cents(_int_value(totals['ending_cash_cents']))}")
     print(f"Cash balances tie: {totals['cash_balances_tie']}")
     return 0
 
@@ -633,6 +639,29 @@ def _required_csv_value(row: dict[str, str], column: str) -> str:
         raise ValidationError(f"Missing required CSV value: {column}")
     return value.strip()
 
+
+
+def _int_value(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError("Expected an integer cent value.")
+    return value
+
+
+def _dict_value(value: object, field_name: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValidationError(f"{field_name} must be a dictionary")
+    return cast(dict[str, object], value)
+
+
+def _dict_rows(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+
+    return [
+        cast(dict[str, object], row)
+        for row in value
+        if isinstance(row, dict)
+    ]
 
 def _parse_iso_date(value: str) -> date:
     if "T" in value or " " in value:

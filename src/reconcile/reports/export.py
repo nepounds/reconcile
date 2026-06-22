@@ -6,6 +6,7 @@ import csv
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
+from typing import cast
 
 from reconcile.exceptions import ValidationError
 from reconcile.reports.balance_sheet import generate_balance_sheet
@@ -106,7 +107,7 @@ def export_trial_balance_csv(
     rows = generate_trial_balance(connection)
     totals = trial_balance_totals(rows)
 
-    csv_rows = [
+    csv_rows: list[dict[str, object]] = [
         {
             "account_id": row["account_id"],
             "account_code": row["account_code"],
@@ -156,7 +157,7 @@ def export_income_statement_csv(
         end_date=end_date,
     )
 
-    csv_rows = [
+    csv_rows: list[dict[str, object]] = [
         *_income_statement_section_rows("revenue", report["revenue_accounts"]),
         *_income_statement_section_rows("expense", report["expense_accounts"]),
     ]
@@ -185,7 +186,7 @@ def export_balance_sheet_csv(
 
     report = generate_balance_sheet(connection, as_of_date=as_of_date)
 
-    csv_rows = [
+    csv_rows: list[dict[str, object]] = [
         *_balance_sheet_section_rows("asset", report["asset_accounts"]),
         *_balance_sheet_section_rows("liability", report["liability_accounts"]),
         *_balance_sheet_section_rows("equity", report["equity_accounts"]),
@@ -376,7 +377,7 @@ def _income_statement_section_rows(
             "account_type": row["account_type"],
             "amount_cents": row["amount_cents"],
         }
-        for row in rows
+        for row in _dict_rows(rows)
     ]
 
 
@@ -396,9 +397,20 @@ def _balance_sheet_section_rows(
             "account_type": row["account_type"],
             "amount_cents": row["balance_cents"],
         }
-        for row in rows
+        for row in _dict_rows(rows)
     ]
 
+
+
+def _dict_rows(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        raise ValidationError("report rows must be a list")
+
+    return [
+        cast(dict[str, object], row)
+        for row in value
+        if isinstance(row, dict)
+    ]
 
 def _load_reconciliation_rows(
     connection: sqlite3.Connection,

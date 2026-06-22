@@ -190,21 +190,25 @@ def _journal_entry_from_row(
 
     lines = [
         JournalLine(
-            line_id=row["line_id"],
-            journal_entry_id=row["journal_entry_id"],
-            account_id=row["account_id"],
-            side=row["side"],
-            amount_cents=row["amount_cents"],
-            description=row["description"],
-            line_number=row["line_number"],
+            line_id=str(row["line_id"]),
+            journal_entry_id=str(row["journal_entry_id"]),
+            account_id=str(row["account_id"]),
+            side=str(row["side"]),
+            amount_cents=int(row["amount_cents"]),
+            description=(
+                str(row["description"])
+                if row["description"] is not None
+                else None
+            ),
+            line_number=int(row["line_number"]),
         )
         for row in line_rows
     ]
 
     return _make_journal_entry(
-        journal_entry_id=entry_row["journal_entry_id"],
-        entry_date=datetime.fromisoformat(entry_row["entry_date"]).date(),
-        description=entry_row["description"],
+        journal_entry_id=str(entry_row["journal_entry_id"]),
+        entry_date=datetime.fromisoformat(str(entry_row["entry_date"])).date(),
+        description=str(entry_row["description"]),
         lines=lines,
         source="projection",
         external_reference=None,
@@ -214,29 +218,20 @@ def _journal_entry_from_row(
 def _make_journal_entry(
     *,
     journal_entry_id: str,
-    entry_date,
+    entry_date: date,
     description: str,
     lines: list[JournalLine],
     source: str,
     external_reference: str | None,
 ) -> JournalEntry:
-    try:
-        return JournalEntry(
-            journal_entry_id=journal_entry_id,
-            entry_date=entry_date,
-            description=description,
-            lines=lines,
-            source=source,
-            external_reference=external_reference,
-        )
-    except TypeError:
-        return JournalEntry(
-            journal_entry_id=journal_entry_id,
-            entry_date=entry_date,
-            description=description,
-            lines=lines,
-            external_reference=external_reference,
-        )
+    return JournalEntry(
+        journal_entry_id=journal_entry_id,
+        entry_date=entry_date,
+        description=description,
+        lines=lines,
+        source=source,
+        external_reference=external_reference,
+    )
 
 
 def _validate_required_string(value: str, field_name: str) -> str:
@@ -266,6 +261,7 @@ def reverse_journal_entry(
         raise ValidationError("journal_entry_id cannot be blank")
 
     original_id = journal_entry_id.strip()
+    clean_source = _validate_required_string(source, "source")
 
     original = connection.execute(
         """
@@ -295,7 +291,7 @@ def reverse_journal_entry(
         raise ValidationError("reversal entries cannot be reversed")
 
     if reversal_date is None:
-        effective_reversal_date = date.fromisoformat(original["entry_date"])
+        effective_reversal_date = date.fromisoformat(str(original["entry_date"]))
     elif isinstance(reversal_date, datetime) or not isinstance(reversal_date, date):
         raise ValidationError("reversal_date must be a date")
     else:
@@ -380,7 +376,7 @@ def reverse_journal_entry(
         entry_date=effective_reversal_date,
         description=final_description,
         lines=reversal_lines,
-        source=source,
+        source=clean_source,
         external_reference=original_id,
     )
     validate_journal_entry(reversal_entry)
@@ -393,7 +389,7 @@ def reverse_journal_entry(
         event_version=1,
         event_timestamp=now,
         effective_date=effective_reversal_date.isoformat(),
-        source=source,
+        source=clean_source,
         actor=actor,
         correlation_id=correlation_id,
         causation_id=None,
@@ -402,7 +398,7 @@ def reverse_journal_entry(
             "reversal_journal_entry_id": final_reversal_id,
             "reversal_date": effective_reversal_date.isoformat(),
             "description": final_description,
-            "source": source,
+            "source": clean_source,
             "external_reference": original_id,
             "lines": [
                 {

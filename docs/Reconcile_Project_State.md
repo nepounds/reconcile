@@ -14,15 +14,15 @@ Do not let implementation drift away from this file. If the plan changes, update
 
 ## Current status
 
-Current step: Step 31 — Final portfolio polish and release cleanup.
+Current step: Step 32 — Type safety and hardening cleanup.
 
-Status: Step 31 complete.
+Status: Step 32 complete.
 
 Approximate project completion: 100%.
 
 Current summary:
 
-* Reconcile is portfolio release-candidate ready.
+* Reconcile is portfolio release-candidate ready with post-release hardening applied.
 * The event-sourced ledger, SQLite projections, reports, bank import,
   reconciliation, categorization, Streamlit dashboard, and GitHub Actions CI are
   implemented for the portfolio MVP.
@@ -37,13 +37,21 @@ Current summary:
   receivable reason.
 * Dashboard screenshots were added under `docs/assets/` and embedded in
   `README.md`.
+* Step 32 added type-safety and hardening cleanup after the release-candidate
+  pass.
+* Step 32 removed stale `JournalEntry(...)` compatibility fallbacks, added a
+  finite `Decimal` guard in money parsing, allowlisted dashboard table-name
+  interpolation, cleaned typed row handling, added mypy to dev tooling and CI,
+  replaced the projection rebuild script print with logging, and added the
+  missing `scripts/__init__.py`.
 * `exports/reconcile.db` remains a generated local database and should not be
   committed.
 
 Final validation status:
 
 ```text
-Current validation: 764 tests passing locally, Ruff clean, and GitHub Actions CI passing.
+Current validation: run python -m pytest, python -m ruff check ., and python -m mypy src dashboard scripts locally after applying Step 32.
+Previous release-candidate validation: 764 tests passing locally, Ruff clean, and GitHub Actions CI passing.
 ```
 
 Final validation commands:
@@ -51,6 +59,7 @@ Final validation commands:
 ```bash
 python -m pytest
 python -m ruff check .
+python -m mypy src dashboard scripts
 git status
 ```
 
@@ -105,6 +114,57 @@ cash_flow.csv           # corrected so JE-004 / Accounts Receivable is operating
 sample outputs          # regenerated or corrected using fake demo data only
 dashboard screenshots   # added under docs/assets/ and embedded in README.md
 exports/reconcile.db    # generated local database; do not commit
+```
+
+
+Completed Step 32 files:
+
+```text
+pyproject.toml
+.github/workflows/ci.yml
+src/reconcile/money.py
+src/reconcile/events/handlers.py
+src/reconcile/journal/service.py
+src/reconcile/cli.py
+src/reconcile/reconciliation/matcher.py
+src/reconcile/reconciliation/splits.py
+src/reconcile/reports/balance_sheet.py
+src/reconcile/reports/export.py
+dashboard/streamlit_app.py
+scripts/__init__.py
+scripts/rebuild_projections.py
+src/reconcile/accounts/__init__.py
+docs/Reconcile_Project_State.md
+docs/Step_Plan.md
+```
+
+
+Completed Step 32 summary:
+
+* Added `mypy` to development dependencies and CI.
+* Added a mypy configuration for the local project sources, dashboard, and scripts.
+* Removed stale `JournalEntry(...)` compatibility fallbacks that omitted the required `source` field.
+* Added finite-Decimal validation before checking money precision.
+* Added dashboard table-name allowlisting before interpolating SQLite identifiers.
+* Kept the reconciliation-link placeholder query parameterized and marked the static-analysis false positive.
+* Tightened typed report and reconciliation helper rows to reduce `dict[str, object]` fallout.
+* Replaced `print()` in `scripts/rebuild_projections.py` with logging.
+* Added `scripts/__init__.py` so scripts are not treated as an implicit namespace package.
+* Kept the cleanup scoped to hardening and type-safety work; no product behavior, schema, report output, or dashboard writeback behavior was added.
+
+Commands to run for Step 32:
+
+```bash
+python -m pytest
+python -m ruff check .
+python -m mypy src dashboard scripts
+git status
+```
+
+Suggested commit message:
+
+```text
+Add type safety and dashboard query hardening
 ```
 
 Next planned step:

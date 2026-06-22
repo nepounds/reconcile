@@ -23,7 +23,7 @@ def apply_event(connection: sqlite3.Connection, event: LedgerEvent) -> None:
         _apply_journal_entry_posted(connection, event)
         apply_journal_entry_posted_to_balances(connection, event)
         return
-    
+
     if event.event_type == "JournalEntryReversed":
         _apply_journal_entry_reversed(connection, event)
         return
@@ -173,23 +173,17 @@ def _journal_entry_from_payload(
     except (KeyError, ValueError) as exc:
         raise ValidationError("invalid journal entry payload date") from exc
 
-    try:
-        journal_entry = JournalEntry(
-            journal_entry_id=str(payload["journal_entry_id"]),
-            entry_date=entry_date,
-            description=str(payload["description"]),
-            lines=lines,
-            source=str(payload.get("source", "event")),
-            external_reference=payload.get("external_reference"),
-        )
-    except TypeError:
-        journal_entry = JournalEntry(
-            journal_entry_id=str(payload["journal_entry_id"]),
-            entry_date=entry_date,
-            description=str(payload["description"]),
-            lines=lines,
-            external_reference=payload.get("external_reference"),
-        )
+    journal_entry = JournalEntry(
+        journal_entry_id=str(payload["journal_entry_id"]),
+        entry_date=entry_date,
+        description=str(payload["description"]),
+        lines=lines,
+        source=str(payload.get("source", "event")),
+        external_reference=_optional_payload_string(
+            payload.get("external_reference"),
+            "external_reference",
+        ),
+    )
 
     validate_journal_entry(journal_entry)
     return journal_entry
@@ -206,11 +200,28 @@ def _journal_line_from_payload(
         journal_entry_id=str(payload["journal_entry_id"]),
         account_id=str(payload["account_id"]),
         side=str(payload["side"]),
-        amount_cents=payload["amount_cents"],
-        description=payload.get("description"),
-        line_number=payload["line_number"],
+        amount_cents=_payload_int(payload["amount_cents"], "amount_cents"),
+        description=_optional_payload_string(
+            payload.get("description"),
+            "description",
+        ),
+        line_number=_payload_int(payload["line_number"], "line_number"),
     )
 
+
+
+def _payload_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(f"{field_name} must be an integer")
+    return value
+
+
+def _optional_payload_string(value: object, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError(f"{field_name} must be a string or None")
+    return value
 
 def _reject_duplicate_account_id(
     connection: sqlite3.Connection,
@@ -302,7 +313,7 @@ def _validate_referenced_accounts_are_active(
 
         if int(row["is_active"]) != 1:
             raise ValidationError(f"inactive account: {account_id}")
-        
+
 
 def _require_payload_fields(
     payload: dict[str, object],
@@ -313,7 +324,7 @@ def _require_payload_fields(
         raise ValidationError(
             f"missing fields in event payload: {', '.join(missing_fields)}"
         )
-    
+
 
 def _apply_journal_entry_reversed(
     connection: sqlite3.Connection,
@@ -420,7 +431,20 @@ def _apply_journal_entry_reversed(
         ):
             raise ValidationError("invalid reversal line line_number")
 
-        validated_lines.append(line)
+        validated_lines.append(
+            {
+                "line_id": line_id,
+                "journal_entry_id": reversal_id,
+                "account_id": account_id,
+                "side": side,
+                "amount_cents": amount_cents,
+                "description": _optional_payload_string(
+                    line.get("description"),
+                    "description",
+                ),
+                "line_number": line_number,
+            }
+        )
 
     connection.execute(
         """

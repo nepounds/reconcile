@@ -300,13 +300,22 @@ def score_split_candidate(
     }
 
 
+def _string_sequence(value: object, field_name: str) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise ValidationError(f"{field_name} must be a list")
+    return tuple(str(item) for item in value)
+
+
 def _candidate_sort_key(candidate: dict[str, object]) -> tuple[object, ...]:
     return (
-        -float(candidate["score"]),
-        abs(int(candidate["amount_delta_cents"])),
-        int(candidate["date_delta_days"]),
-        int(candidate["component_count"]),
-        tuple(str(value) for value in candidate["component_movement_ids"]),
+        -_validate_non_negative_number(candidate.get("score"), "score"),
+        abs(_validate_int(candidate.get("amount_delta_cents"), "amount_delta_cents")),
+        _validate_int(candidate.get("date_delta_days"), "date_delta_days"),
+        _validate_int(candidate.get("component_count"), "component_count"),
+        _string_sequence(
+            candidate.get("component_movement_ids"),
+            "component_movement_ids",
+        ),
     )
 
 
@@ -328,8 +337,8 @@ def find_split_candidates(
 
     bank_amount = _validate_int(bank_transaction.get("amount_cents"), "amount_cents")
     bank_date = _date_value(
-        bank_transaction.get("transaction_date"), 
-        "transaction_date"
+        bank_transaction.get("transaction_date"),
+        "transaction_date",
     )
 
     sorted_movements = sorted(ledger_cash_movements, key=_movement_sort_key)

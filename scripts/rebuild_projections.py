@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import sys
 from pathlib import Path
 
 from reconcile.db import connect, initialize_schema
 from reconcile.projections.rebuild import rebuild_projections
+
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +28,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     """Run the projection rebuild workflow."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+
     args = parse_args()
     db_path = Path(args.db_path)
 
@@ -31,7 +37,7 @@ def main() -> None:
         initialize_schema(connection)
         rebuild_projections(connection)
 
-    print(f"Projection rebuild complete: {db_path}")
+    LOGGER.info("Projection rebuild complete: %s", db_path)
 
 
 if __name__ == "__main__":

@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import date, datetime
+from typing import TypedDict
 
 from reconcile.accounts.models import validate_account_type, validate_normal_balance
 from reconcile.exceptions import ValidationError
 
 _VALID_LINE_SIDES = {"debit", "credit"}
 _BALANCE_SHEET_ACCOUNT_TYPES = {"asset", "liability", "equity"}
+
+
+class _BalanceSheetAccount(TypedDict):
+    account_id: str
+    account_code: str
+    account_name: str
+    account_type: str
+    normal_balance: str
+    debit_total_cents: int
+    credit_total_cents: int
 
 
 def _validate_report_date(value: date, field_name: str) -> None:
@@ -70,10 +81,10 @@ def _net_income_through_date(
     expense_credits = 0
 
     for row in rows:
-        account_type = row["account_type"]
+        account_type = str(row["account_type"])
         validate_account_type(account_type)
 
-        side = row["side"]
+        side = str(row["side"])
         _validate_line_side(side)
 
         amount_cents = row["amount_cents"]
@@ -122,22 +133,23 @@ def generate_balance_sheet(
         """
     ).fetchall()
 
-    account_data: dict[str, dict[str, int | str]] = {}
+    account_data: dict[str, _BalanceSheetAccount] = {}
 
     for row in account_rows:
-        account_type = row["account_type"]
-        normal_balance = row["normal_balance"]
+        account_type = str(row["account_type"])
+        normal_balance = str(row["normal_balance"])
 
         validate_account_type(account_type)
         validate_normal_balance(normal_balance)
 
         if account_type in _BALANCE_SHEET_ACCOUNT_TYPES:
-            account_data[row["account_id"]] = {
-                "account_id": row["account_id"],
-                "account_code": row["account_code"],
-                "account_name": row["account_name"],
-                "account_type": account_type,
-                "normal_balance": normal_balance,
+            account_id = str(row["account_id"])
+            account_data[account_id] = {
+                "account_id": account_id,
+                "account_code": str(row["account_code"]),
+                "account_name": str(row["account_name"]),
+                "account_type": str(account_type),
+                "normal_balance": str(normal_balance),
                 "debit_total_cents": 0,
                 "credit_total_cents": 0,
             }
@@ -172,13 +184,13 @@ def generate_balance_sheet(
     ).fetchall()
 
     for row in activity_rows:
-        account_type = row["account_type"]
-        normal_balance = row["normal_balance"]
+        account_type = str(row["account_type"])
+        normal_balance = str(row["normal_balance"])
 
         validate_account_type(account_type)
         validate_normal_balance(normal_balance)
 
-        side = row["side"]
+        side = str(row["side"])
         _validate_line_side(side)
 
         amount_cents = row["amount_cents"]
@@ -188,7 +200,7 @@ def generate_balance_sheet(
         if account_type not in _BALANCE_SHEET_ACCOUNT_TYPES:
             continue
 
-        account_id = row["account_id"]
+        account_id = str(row["account_id"])
         if account_id not in account_data:
             raise ValidationError(f"balance sheet account is missing: {account_id}")
 
@@ -203,16 +215,16 @@ def generate_balance_sheet(
 
     for account in account_data.values():
         balance_cents = _normal_balance_amount(
-            normal_balance=str(account["normal_balance"]),
-            debit_total_cents=int(account["debit_total_cents"]),
-            credit_total_cents=int(account["credit_total_cents"]),
+            normal_balance=account["normal_balance"],
+            debit_total_cents=account["debit_total_cents"],
+            credit_total_cents=account["credit_total_cents"],
         )
 
-        report_row = {
-            "account_id": str(account["account_id"]),
-            "account_code": str(account["account_code"]),
-            "account_name": str(account["account_name"]),
-            "account_type": str(account["account_type"]),
+        report_row: dict[str, int | str] = {
+            "account_id": account["account_id"],
+            "account_code": account["account_code"],
+            "account_name": account["account_name"],
+            "account_type": account["account_type"],
             "balance_cents": balance_cents,
         }
 
@@ -228,13 +240,13 @@ def generate_balance_sheet(
             )
 
     asset_accounts.sort(
-    key=lambda row: (str(row["account_code"]), str(row["account_id"]))
+        key=lambda row: (str(row["account_code"]), str(row["account_id"]))
     )
     liability_accounts.sort(
-    key=lambda row: (str(row["account_code"]), str(row["account_id"]))
+        key=lambda row: (str(row["account_code"]), str(row["account_id"]))
     )
     equity_accounts.sort(
-    key=lambda row: (str(row["account_code"]), str(row["account_id"]))
+        key=lambda row: (str(row["account_code"]), str(row["account_id"]))
     )
 
     current_period_net_income_cents = _net_income_through_date(

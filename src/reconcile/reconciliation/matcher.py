@@ -435,9 +435,9 @@ def _validate_split_thresholds(
 
 def _fuzzy_candidate_sort_key(candidate: dict[str, Any]) -> tuple[object, ...]:
     return (
-        -float(candidate["score"]),
-        abs(int(candidate["amount_delta_cents"])),
-        abs(int(candidate["date_delta_days"])),
+        -_object_float(candidate.get("score"), "score"),
+        abs(_object_int(candidate.get("amount_delta_cents"), "amount_delta_cents")),
+        abs(_object_int(candidate.get("date_delta_days"), "date_delta_days")),
         str(candidate["ledger_cash_movement_id"]),
     )
 
@@ -559,6 +559,32 @@ def _empty_split_score(
     }
 
 
+
+def _object_list(value: object, field_name: str) -> list[object]:
+    if not isinstance(value, list):
+        raise ValidationError(f"{field_name} must be a list")
+    return value
+
+
+def _object_float(value: object, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValidationError(f"{field_name} must be a number")
+    return float(value)
+
+
+def _object_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(f"{field_name} must be an integer")
+    return value
+
+
+def _movement_dicts(value: object, field_name: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValidationError(f"{field_name} must be a list")
+    if not all(isinstance(item, dict) for item in value):
+        raise ValidationError(f"{field_name} must contain dictionaries")
+    return [dict(item) for item in value]
+
 def _score_split_candidates_with_penalty(
     *,
     bank_row: sqlite3.Row,
@@ -583,7 +609,10 @@ def _score_split_candidates_with_penalty(
     for raw_candidate in raw_candidates:
         components = [
             movements_by_id[str(component_id)]
-            for component_id in raw_candidate["component_movement_ids"]
+            for component_id in _object_list(
+                raw_candidate["component_movement_ids"],
+                "component_movement_ids",
+            )
         ]
         candidates.append(
             score_split_candidate(
@@ -597,15 +626,20 @@ def _score_split_candidates_with_penalty(
 
     candidates.sort(
         key=lambda candidate: (
-            -float(candidate["score"]),
-            abs(int(candidate["amount_delta_cents"])),
-            int(candidate["date_delta_days"]),
-            int(candidate["component_count"]),
-            tuple(str(value) for value in candidate["component_movement_ids"]),
+            -_object_float(candidate.get("score"), "score"),
+            abs(_object_int(candidate.get("amount_delta_cents"), "amount_delta_cents")),
+            _object_int(candidate.get("date_delta_days"), "date_delta_days"),
+            _object_int(candidate.get("component_count"), "component_count"),
+            tuple(
+                str(value)
+                for value in _object_list(
+                    candidate.get("component_movement_ids"),
+                    "component_movement_ids",
+                )
+            ),
         )
     )
     return candidates
-
 
 
 def run_exact_reconciliation(
@@ -660,7 +694,7 @@ def run_exact_reconciliation(
     movements_by_key: dict[tuple[int, str], list[dict[str, Any]]] = defaultdict(list)
     for movement in ledger_movements:
         key = (
-            int(movement["amount_cents"]),
+            _object_int(movement.get("amount_cents"), "amount_cents"),
             _date_key(movement.get("entry_date"), "entry_date"),
         )
         movements_by_key[key].append(movement)
@@ -1017,8 +1051,12 @@ def run_fuzzy_reconciliation(
                         reason=reason,
                     )
                 else:
-                    top_score = float(top["score"])
-                    near_score = float(near["score"]) if near else None
+                    top_score = _object_float(top.get("score"), "score")
+                    near_score = (
+                        _object_float(near.get("score"), "score")
+                        if near
+                        else None
+                    )
                     score_gap = (
                         top_score - near_score
                         if near_score is not None
@@ -1079,8 +1117,14 @@ def run_fuzzy_reconciliation(
                         )
 
                     score = top_score if status != MATCH_STATUS_UNMATCHED else 0.0
-                    amount_delta = int(top["amount_delta_cents"])
-                    date_delta = int(top["date_delta_days"])
+                    amount_delta = _object_int(
+                        top.get("amount_delta_cents"),
+                        "amount_delta_cents",
+                    )
+                    date_delta = _object_int(
+                        top.get("date_delta_days"),
+                        "date_delta_days",
+                    )
                     ledger_movement_id = str(top["ledger_cash_movement_id"])
                     score_details = top
 
@@ -1288,8 +1332,12 @@ def run_split_reconciliation(
                         reason=reason,
                     )
                 else:
-                    top_score = float(top["score"])
-                    near_score = float(near["score"]) if near else None
+                    top_score = _object_float(top.get("score"), "score")
+                    near_score = (
+                        _object_float(near.get("score"), "score")
+                        if near
+                        else None
+                    )
                     score_gap = (
                         top_score - near_score
                         if near_score is not None
@@ -1350,8 +1398,14 @@ def run_split_reconciliation(
                         )
 
                     score = top_score if status != MATCH_STATUS_UNMATCHED else 0.0
-                    amount_delta = int(top["amount_delta_cents"])
-                    date_delta = int(top["date_delta_days"])
+                    amount_delta = _object_int(
+                        top.get("amount_delta_cents"),
+                        "amount_delta_cents",
+                    )
+                    date_delta = _object_int(
+                        top.get("date_delta_days"),
+                        "date_delta_days",
+                    )
                     score_details = top
 
                 explanation = build_split_match_explanation(
@@ -1386,14 +1440,18 @@ def run_split_reconciliation(
                 )
 
                 if auto_matched and top is not None:
-                    for component in top["components"]:
+                    for component in _movement_dicts(top["components"], "components"):
                         _insert_ledger_link(
                             connection,
                             reconciliation_match_id=match_id,
                             movement=component,
                         )
                     used_movement_ids.update(
-                        str(value) for value in top["component_movement_ids"]
+                        str(value)
+                        for value in _object_list(
+                            top["component_movement_ids"],
+                            "component_movement_ids",
+                        )
                     )
     except sqlite3.IntegrityError as exc:
         raise ValidationError("could not save reconciliation results") from exc

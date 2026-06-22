@@ -32,7 +32,11 @@ def parse_money_to_cents(value: str) -> int:
     except InvalidOperation as exc:
         raise MoneyError(f"Invalid money value: {value!r}.") from exc
 
-    if amount.as_tuple().exponent < -2:
+    if not amount.is_finite():
+        raise MoneyError("Money value must be finite.")
+
+    exponent = amount.as_tuple().exponent
+    if not isinstance(exponent, int) or exponent < -2:
         raise MoneyError("Money value cannot have more than two decimal places.")
 
     return int(amount * 100)

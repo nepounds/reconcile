@@ -4,14 +4,13 @@ This plan tracks the completed Reconcile portfolio build steps.
 
 ## Current status
 
-Steps 0 through 29 are complete.
+Steps 0 through 32 are complete.
 
-Step 30 is the current documentation-polish step. When Step 30 changes are
-applied and validated, Step 30 is complete.
+Step 32 is a post-release hardening step for type safety, mypy, and dashboard
+query hygiene.
 
-Step 31 remains the final portfolio polish and release cleanup step.
-
-The project is not marked complete yet.
+The portfolio MVP is complete. Future enhancements should be tracked separately
+from the release-candidate scope.
 
 ## Step history
 
@@ -263,14 +262,38 @@ Polish docs and refine cash flow classification
 
 ### Step 31 — Final portfolio polish and release cleanup
 
-Status: Not started.
+Status: Complete.
 
-Remaining scope:
+Added root release files, final README/status cleanup, final step-plan cleanup,
+sample-output cleanup, dashboard screenshots, and final project-complete marking.
 
-- Final README pass after Step 30 is validated.
-- Optional screenshots if available.
-- Final smoke checks.
-- Final git status cleanup.
-- Final project-complete marking only after validation.
+### Step 32 — Type safety and hardening cleanup
 
-Do not mark Step 31 complete until that final pass is actually done.
+Status: Complete.
+
+Scope:
+
+- Remove stale `JournalEntry(...)` compatibility fallbacks that omitted the
+  required `source` field.
+- Add finite-Decimal validation in money parsing before exponent checks.
+- Add dashboard table-name allowlisting before SQLite identifier interpolation.
+- Tighten typed row handling in CLI, reconciliation, split matching, balance
+  sheet, and CSV export helpers.
+- Add `mypy` to dev tooling and CI.
+- Replace the projection rebuild script `print()` with logging.
+- Add `scripts/__init__.py`.
+
+Validation commands:
+
+```bash
+python -m pytest
+python -m ruff check .
+python -m mypy src dashboard scripts
+git status
+```
+
+Suggested commit message:
+
+```text
+Add type safety and dashboard query hardening
+```
