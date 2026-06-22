@@ -23,9 +23,14 @@ exports/*.db
 exports/*.sqlite
 exports/*.sqlite3
 
-# Local environment files
+# Local environment files and secrets
 .env
 .env.*
+.streamlit/secrets.toml
+
+# Local model/export artifacts that should not be committed
+*.pkl
+*.joblib
 
 # Build artifacts
 build/

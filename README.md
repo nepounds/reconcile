@@ -21,26 +21,24 @@ The project focuses on a practical accounting systems problem:
 
 ## Current status
 
-Reconcile is in final portfolio-polish mode.
+Reconcile is portfolio release-candidate ready.
 
 Current completed milestone:
 
 ```text
-Step 30 — Polish README and architecture docs
+Step 31 — Final portfolio polish and release cleanup
 ```
 
 Approximate project completion:
 
 ```text
-96% to 98%
+100%
 ```
 
 Current validation status:
 
 ```text
-Cash-flow syntax check passed in Step 30 sandbox
-Full local pytest and ruff validation should be run after applying this patch
-GitHub Actions CI passed after Step 29
+Current validation: 764 tests passing locally, Ruff clean, and GitHub Actions CI passing.
 ```
 
 The core Python engine is largely complete. Reconcile now has the event-sourced
@@ -50,7 +48,7 @@ classifier behavior, CLI workflows, CSV exports, fake sample outputs,
 direct-method cash flow reporting, a read-only Streamlit dashboard, and GitHub
 Actions CI.
 
-Remaining planned work is Step 31 final portfolio cleanup.
+The portfolio MVP is complete. Remaining work belongs in future enhancements, not the release-candidate scope.
 
 ---
 
@@ -393,6 +391,12 @@ Dashboard limitations:
 
 ---
 
+## Dashboard preview
+
+![Reconcile dashboard overview](docs/assets/dashboard-overview.png)
+
+![Reconcile cash flow report](docs/assets/dashboard-cash-flow.png)
+
 ## Implemented modules
 
 Core modules currently include:
@@ -497,13 +501,17 @@ python -m pytest
 python -m ruff check .
 ```
 
-Step 30 validation to run locally after applying this patch:
+Current validation:
+
+```text
+Current validation: 764 tests passing locally, Ruff clean, and GitHub Actions CI passing.
+```
+
+Final release-candidate validation commands:
 
 ```powershell
-python -m pytest tests/test_cash_flow_report.py
 python -m pytest
 python -m ruff check .
-python scripts/run_reconcile.py --help
 python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
 git status
 ```
@@ -659,7 +667,7 @@ Current limitations are intentional:
 
 ## Roadmap
 
-### Completed
+### Completed portfolio MVP
 
 - Step 0 — Planning and project state
 - Step 1 — Project skeleton and tooling baseline
@@ -692,21 +700,18 @@ Current limitations are intentional:
 - Step 28 — Dashboard reconciliation and categorization review
 - Step 29 — CI workflow
 - Step 30 — README and architecture documentation polish
+- Step 31 — Final portfolio polish and release cleanup
 
-### Remaining
+### Future enhancements
 
-#### Step 31 — Final portfolio cleanup
+Future work is intentionally separate from the completed portfolio MVP:
 
-Planned:
-
-- Final README review.
-- Final docs review.
-- Final CHANGELOG update.
-- Final CONTRIBUTING update.
-- Final smoke checks.
-- Final sample output review.
-- Confirm no secrets or real data.
-- Mark project complete.
+- Manual reconciliation confirmation/rejection workflow.
+- Dashboard writeback for review decisions.
+- Full AR/AP subledger, invoice workflow, or bill-pay workflow.
+- Bank API integrations.
+- Authentication and multi-user deployment.
+- Production hardening.
 
 ---
 
@@ -722,10 +727,10 @@ git status
 
 One completed build step should usually become one atomic commit.
 
-Suggested Step 30 commit message:
+Suggested Step 31 commit message:
 
 ```text
-Polish docs and refine cash flow classification
+Finalize Reconcile portfolio release
 ```
 
 ---
@@ -762,9 +767,19 @@ htmlcov/
 
 ---
 
+## Project files
+
+Helpful root project files:
+
+- `LICENSE` — MIT license.
+- `CHANGELOG.md` — portfolio release-candidate summary.
+- `CONTRIBUTING.md` — local setup, validation, and data-safety notes.
+
+---
+
 ## License
 
-License decision is not finalized yet.
+MIT License. See `LICENSE`.
 
 ---
 
@@ -776,7 +791,7 @@ The living source of truth for project progress is:
 docs/Reconcile_Project_State.md
 ```
 
-That file should be updated after every completed build step.
+That file is a detailed build journal and project-control document. It is intentionally long and is not meant to be read end-to-end. For a quick overview, start with this README.
 
 [ci-badge]: https://github.com/nepounds/reconcile/actions/workflows/ci.yml/badge.svg
 [ci-workflow]: https://github.com/nepounds/reconcile/actions/workflows/ci.yml

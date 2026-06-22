@@ -6,1070 +6,110 @@ Update it after every completed step.
 
 Do not let implementation drift away from this file. If the plan changes, update this file first.
 
+> Note: this file is a detailed build journal and project-control document.
+> It is intentionally long and is not meant to be read end-to-end.
+> For a quick overview, start with `README.md`.
+
 ---
 
 ## Current status
 
-Current step: Step 30 — Polish README and architecture docs.
+Current step: Step 31 — Final portfolio polish and release cleanup.
 
-Status: Step 30 complete.
+Status: Step 31 complete.
 
-Approximate project completion: 96% to 98%.
+Approximate project completion: 100%.
 
 Current summary:
 
-* Reconcile has its initial Python package skeleton under `src/reconcile/`.
-* `pyproject.toml` is the dependency source of truth.
-* Development tooling includes pytest, ruff, and Hypothesis.
-* The package import smoke test passed in Step 1.
-* Fake demo input CSV files exist for the chart of accounts, journal entries, and bank statement.
-* Step 2 added the custom exception hierarchy and integer-cents money helpers.
-* Step 3 added account domain definitions, normal balance rules, and a validated `Account` model.
-* Step 4 added journal line and journal entry models with double-entry validation.
-* Step 5 added SQLite connection helpers and idempotent MVP schema initialization.
-* Step 6 added validated ledger event models and append-only SQLite event storage.
-* Step 7 added account-opening services and an `AccountOpened` projection handler for the `accounts` table.
-* Step 8 added journal posting through append-only `JournalEntryPosted` events.
-* Step 8 added journal entry and journal line projections into SQLite.
-* Step 9 added account balance projections for posted journal entries.
-* Step 10 added a projection rebuild workflow that clears derived tables and replays append-only events.
-* Step 11 added a trial balance report from account projections.
-* Step 12 added income statement and balance sheet reports from posted journal entries and lines.
-* Step 13 added journal reversal behavior through immutable `JournalEntryReversed` events.
-* Step 14 added property-based accounting invariant tests with Hypothesis.
-* Step 15 added bank statement CSV import and bank description normalization.
-* Step 15 added raw bank description preservation, normalized descriptions, signed integer bank amounts, deterministic row hashes, and bank import metadata.
-* Step 16 added bank duplicate detection and duplicate marking for imported bank transactions.
-* Step 16 integrated duplicate marking into bank CSV import so duplicates are flagged immediately after import.
-* Step 17 added ledger cash movement extraction for selected cash accounts.
-* Step 17 converts debit lines to Cash into positive bank-comparable movements.
-* Step 17 converts credit lines to Cash into negative bank-comparable movements.
-* Step 17 supports inclusive start and end date filtering for ledger cash movements.
-* Step 17 excludes reversed original entries and reversal entries by default, with an audit-inclusive option.
-* Step 18 added exact reconciliation matching between imported bank transactions and extracted ledger cash movements.
-* Step 18 creates reconciliation run records with completed status and JSON configuration.
-* Step 18 stores reconciliation match records with match type, score, deltas, status, and JSON explanations.
-* Step 18 stores ledger-link rows for exact auto-matches only.
-* Step 18 enforces one-to-one ledger movement use within a reconciliation run.
-* Step 18 leaves unmatched bank transactions clearly marked as unmatched.
-* Step 18 blocks duplicate-flagged bank transactions from unsafe auto-matching.
-* Step 19 added fuzzy reconciliation scoring for amount, date, and description candidates.
-* Step 19 added fuzzy reconciliation run behavior with configurable amount tolerance and date windows.
-* Step 19 stores fuzzy score components and explanations on reconciliation match records.
-* Step 19 distinguishes fuzzy auto-matched, candidate, ambiguous, and unmatched decisions.
-* Step 19 prevents unsafe auto-matches when top candidates are too close.
-* Step 19 applies duplicate penalties and blocks duplicate-flagged bank rows from fuzzy auto-matching.
-* Step 19 enforces one-to-one ledger movement use for fuzzy auto-matches within a run.
-* Step 20 added limited split reconciliation matching for one bank transaction to two or three ledger cash movements.
-* Step 20 added bounded split candidate discovery using same-sign components, amount tolerance, date windows, and deterministic ordering.
-* Step 20 added split candidate scoring using amount, date, description, and split-penalty components.
-* Step 20 added split reconciliation run behavior with auto-matched, candidate, ambiguous, and unmatched decisions.
-* Step 20 stores split explanations with component movement IDs, component details, score components, and decision reasons.
-* Step 20 creates one ledger-link row per component only for split auto-matches.
-* Step 20 prevents component ledger movements from being reused across split auto-matches in the same run.
-* Step 20 blocks duplicate-flagged bank transactions from split auto-matching.
-* Step 21 added a thin `argparse` CLI at `src/reconcile/cli.py`.
-* Step 21 added `scripts/run_reconcile.py` as a thin wrapper around `reconcile.cli.main`.
-* Step 21 added CLI workflows for database initialization, demo seeding, projection rebuilds, reports, bank import, and exact/fuzzy/split reconciliation.
-* Step 21 keeps CLI output plain text and keeps business logic inside existing package modules.
-* Step 21 added CLI tests covering command wiring, demo seeding, reporting, bank import, reconciliation commands, validation errors, and wrapper smoke behavior.
-* Step 22 added stable CSV exports for trial balance, income statement, balance sheet, and reconciliation results.
-* Step 22 added `src/reconcile/reports/export.py` with read-only export functions that create parent output directories as needed.
-* Step 22 added `export_all_reports` for coordinated report export into an output directory.
-* Step 22 exports integer cents only and does not format report money as dollars.
-* Step 22 exports report data rows only and keeps totals in returned summary dictionaries.
-* Step 22 exports reconciliation results by joining reconciliation matches to bank transactions and aggregating ledger links.
-* Step 22 skips `reconciliation_results.csv` when no reconciliation run ID is provided.
-* Step 22 added `export-reports` as a top-level CLI command.
-* Step 22 wired CLI report exports to `export_all_reports` while keeping CLI business logic thin.
-* Step 22 generated fake sample output CSV files under `examples/sample_output/`.
-* Step 22 added report export tests and CLI export tests covering file creation, headers, row counts, summaries, reconciliation exports, validation errors, and mutation safety.
-* Step 23 added deterministic rule-based categorization for imported bank transactions.
-* Step 23 added immutable `CategoryRule` models with validation for rule IDs, categories, priorities, text criteria, tokens, amount bounds, and amount signs.
-* Step 23 added rule matching for normalized descriptions, raw-description fallback, any-token rules, all-token rules, amount ranges, and amount signs.
-* Step 23 added explainable categorization result dictionaries with category, source, rule ID, reason, matched priority, matched description, and amount cents.
-* Step 23 added deterministic rule ordering where highest priority wins and tied priorities sort by rule ID.
-* Step 23 added uncategorized result behavior using `category=None` when no rule matches.
-* Step 23 added fake/demo-friendly default rules for owner contributions, software, office supplies, meals, rent, and revenue.
-* Step 23 added a read-only helper to load imported bank transactions for categorization review without mutating source rows or appending events.
-* Step 23 added focused categorization tests covering validation, normalization, rule matching, deterministic categorization, default rules, transaction validation, read-only loading, and mutation safety.
-* Step 24 added append-only categorization correction storage in SQLite.
-* Step 24 added an idempotent `category_corrections` schema initializer without modifying the core database initializer.
-* Step 24 added correction recording, correction listing, latest-correction lookup, training example extraction, and correction application helpers.
-* Step 24 keeps category corrections separate from imported bank transaction rows and does not store final categories on `bank_transactions`.
-* Step 24 added deterministic correction precedence where latest correction wins for each bank transaction.
-* Step 24 added a small optional local standard-library classifier based on nearest token overlap instead of adding scikit-learn.
-* Step 24 added rule/correction/classifier precedence: latest correction, then rule, then confident local classifier, then uncategorized.
-* Step 24 added classifier confidence handling and low-confidence uncategorized results.
-* Step 24 added focused correction and classifier tests covering validation, ordering, mutation safety, training behavior, prediction behavior, and precedence.
-* Step 25 added a direct-method cash flow report from posted journal activity.
-* Step 25 identifies cash-like asset/debit accounts using selected account IDs or cash/checking/bank heuristics.
-* Step 25 classifies cash movement counterparties into operating, investing, and financing sections.
-* Step 25 calculates beginning cash immediately before the report start date.
-* Step 25 calculates ending cash through the report end date.
-* Step 25 proves beginning cash plus net cash change equals ending cash with a cash-balances-tie flag.
-* Step 25 excludes or nets out cash-to-cash transfers so transfers do not inflate cash flow.
-* Step 25 added cash flow CSV export and included `cash_flow.csv` in `export_all_reports`.
-* Step 25 added CLI support for `report cash-flow`.
-* Step 25 generated fake sample output at `examples/sample_output/cash_flow.csv`.
-* Step 25 added focused cash flow report, export, and CLI tests.
-* Step 26 added the Streamlit dashboard foundation.
-* Step 26 added `dashboard/streamlit_app.py` as a thin local demo dashboard.
-* Step 26 added a database path input with `exports/reconcile.db` as the default.
-* Step 26 added friendly missing-database setup instructions.
-* Step 26 added read-only database counts for core accounting, bank, reconciliation, and categorization tables.
-* Step 26 added summary metrics for ledger events, accounts, posted journal entries, bank transactions, reconciliation runs, trial balance status, and cash ending balance.
-* Step 26 added a small trial balance/account balance preview using existing report logic.
-* Step 26 added helper tests for dashboard database status, table counts, summary data, formatting, import safety, mutation safety, and missing optional tables.
-* Step 26 added Streamlit as a runtime dependency.
-* Step 27 expanded the Streamlit dashboard with sidebar navigation.
-* Step 27 added read-only dashboard pages for Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline.
-* Step 27 added default report dates of 2026-01-01 through 2026-01-31 and a default as-of date of 2026-01-31.
-* Step 27 added report-loading helpers that call existing package report functions instead of adding dashboard business logic.
-* Step 27 added dashboard display helpers for optional cents, optional boolean status, report row extraction, and report rows with cent fields.
-* Step 27 added friendly validation handling for invalid report date ranges and invalid as-of dates.
-* Step 27 added a read-only event timeline helper that queries `ledger_events` in deterministic `event_sequence` order.
-* Step 27 added compact payload inspection for ledger events in Streamlit expanders.
-* Step 27 preserved the known accounting refinement note that customer collections through Accounts Receivable should classify as operating cash flow, not investing.
-* Step 27 expanded dashboard helper tests for report loaders, date validation, event timeline loading, JSON-serializable helper data, and read-only safety.
-* Step 28 added read-only Streamlit dashboard pages for Bank Reconciliation and Categorization Review.
-* Step 28 added reconciliation review helpers for runs, matches, explanation JSON, match details, and ledger links.
-* Step 28 displays reconciliation match status, score, amount/date deltas, explanation summaries, and linked journal details.
-* Step 28 added categorization review helpers for imported bank transactions, rule-based categories, latest corrections, duplicate groups, and summary metrics.
-* Step 28 keeps categorization classifier use optional and does not train or persist dashboard models.
-* Step 28 preserves all dashboard behavior from Steps 26 and 27 while expanding navigation.
-* Step 28 dashboard helpers remain read-only and do not append events, run reconciliation, import bank files, record corrections, rebuild projections, or write export/model files.
-* Step 28 expanded dashboard helper tests for reconciliation review, explanation parsing, categorization review, empty states, JSON serialization, and mutation safety.
-* Step 29 added GitHub Actions CI at `.github/workflows/ci.yml`.
-* Step 29 CI runs on pushes and pull requests.
-* Step 29 CI checks out the repository, sets up Python 3.13, installs the package with dev dependencies, runs Ruff, and runs the full pytest suite.
-* Step 29 keeps CI simple with no matrix, deployment, caching, Streamlit launch job, coverage service, mypy, pre-commit, Docker, secrets, or local database requirement.
-* Step 29 left the README badge for Step 30 README polish.
-* Step 30 polished the architecture, event model, accounting invariant, reconciliation design, and step plan documentation.
-* Step 30 refined direct-method cash-flow classification so customer receivable collections and ordinary vendor payable payments classify as operating cash flow.
-* Step 30 added focused cash-flow tests for Accounts Receivable and Accounts Payable classification.
-* Step 30 did not mark the project complete and left final portfolio release cleanup for Step 31.
-* Trial balance rows include account identity, debit totals, credit totals, and ending debit/credit balances.
-* Income statements support inclusive start and end dates.
-* Income statements include revenue and expense accounts only.
-* Income statements calculate revenue as credits minus debits and expenses as debits minus credits.
-* Balance sheets support an as-of date by reading posted journal lines through that date.
-* Balance sheets include asset, liability, and equity account sections.
-* Balance sheets include current period net income as an equity-like amount before closing entries exist.
-* Balance sheets do not rely only on cumulative `account_balances` for as-of-date reporting.
-* Journal reversals create opposite debit/credit lines while preserving original posted entries and original activity totals.
-* Journal reversals mark the original posted entry with `reversed_by_entry_id` and mark the reversal entry with `reversal_of_entry_id`.
-* Projection rebuilds replay `JournalEntryReversed` events and restore reversal state and balances.
-* Property tests generate many valid accounting scenarios and verify core accounting laws still hold.
-* Bank imports preserve source rows instead of deleting or merging anything.
-* Duplicate imported bank rows are flagged with deterministic `duplicate_group_id` values.
-* Duplicate detection returns a computed `duplicate_reason` without adding a new schema column.
-* Duplicate detection supports row-hash, external-ID, and transaction-fingerprint rules.
-* Ledger cash movement extraction returns stable movement IDs, journal entry references, journal line references, cash account metadata, signed integer amounts, and reversal metadata.
-* Exact reconciliation uses exact cent equality and exact date equality only.
-* Exact reconciliation uses bank-sign convention consistently with ledger cash movements.
-* Duplicate detection precedence is row hash, then external ID, then transaction fingerprint.
-* Report generation reads existing data and does not append events, rebuild projections, write files, print, or mutate projections.
-* Ledger cash movement extraction reads existing journal projections and does not append events, rebuild projections, write files, print, or mutate accounting or bank tables.
-* Exact reconciliation writes only reconciliation run, match, and ledger-link tables.
-* Dashboard report pages and event timeline are implemented as read-only Streamlit pages.
-* Manual review UI, confirmation/rejection events, Excel exports, JSON exports, PDF exports, and unlimited subset-sum split search are still intentionally not implemented.
+* Reconcile is portfolio release-candidate ready.
+* The event-sourced ledger, SQLite projections, reports, bank import,
+  reconciliation, categorization, Streamlit dashboard, and GitHub Actions CI are
+  implemented for the portfolio MVP.
+* Step 30 refined direct-method cash-flow classification so ordinary customer
+  receivable collections and ordinary vendor payable payments classify as
+  operating cash flow.
+* Step 31 added root release files, final README/status cleanup, final step-plan
+  cleanup, sample-output cleanup, dashboard screenshots, and final
+  project-complete marking.
+* The stale sample `cash_flow.csv` row for `JE-004` / Accounts Receivable has
+  been corrected so it appears as operating cash flow with the customer
+  receivable reason.
+* Dashboard screenshots were added under `docs/assets/` and embedded in
+  `README.md`.
+* `exports/reconcile.db` remains a generated local database and should not be
+  committed.
 
-Completed Step 30 files:
+Final validation status:
+
+```text
+Current validation: 764 tests passing locally, Ruff clean, and GitHub Actions CI passing.
+```
+
+Final validation commands:
+
+```bash
+python -m pytest
+python -m ruff check .
+git status
+```
+
+Completed Step 31 files:
 
 ```text
 README.md
-docs/Architecture.md
-docs/Event_Model.md
-docs/Accounting_Invariants.md
-docs/Reconciliation_Design.md
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md
+docs/Reconcile_Project_State.md
 docs/Step_Plan.md
-docs/Reconcile_Project_State.md
-src/reconcile/reports/cash_flow.py
-tests/test_cash_flow_report.py
-```
-
-Completed Step 30 summary:
-
-* Polished the architecture documentation so it describes the implemented local-first SQLite architecture rather than Step 0 planned behavior.
-* Updated event model documentation to distinguish implemented ledger events from table-backed MVP bank import, reconciliation, and categorization workflows.
-* Expanded accounting invariant documentation for double-entry rules, integer cents, expanded accounting equation behavior, projection rebuilds, reversals, and Hypothesis property tests.
-* Updated reconciliation design documentation to include implemented exact, fuzzy, split, CSV export, and read-only dashboard review behavior.
-* Updated the step plan so Steps 0 through 29 are complete, Step 30 is complete after validation, and Step 31 remains the final release cleanup step.
-* Refined direct-method cash-flow classification so Accounts Receivable/customer receivables classify as operating instead of investing.
-* Refined direct-method cash-flow classification so Accounts Payable/vendor payables classify as operating instead of financing.
-* Preserved existing behavior where other non-cash assets classify as investing and ordinary liabilities/equity classify as financing.
-* Added focused cash-flow tests for AR classifier behavior, AP classifier behavior, customer receivable collections, and vendor payable payments.
-* Kept Step 30 scoped to documentation polish and the small accounting refinement.
-* Did not add new dashboard pages, reconciliation writeback, categorization writeback, schema changes, new event types, new dependencies, deployment, screenshots, or final project-complete marking.
-
-Commands run for Step 30:
-
-```bash
-python -m py_compile /mnt/data/cash_flow.py /mnt/data/test_cash_flow_report.py
-python -m pytest tests/test_cash_flow_report.py
-python -m pytest
-python -m ruff check .
-python scripts/run_reconcile.py --help
-python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
-git status
-```
-
-Results:
-
-```text
-python -m py_compile /mnt/data/cash_flow.py /mnt/data/test_cash_flow_report.py  # passed in sandbox for uploaded files
-python -m pytest tests/test_cash_flow_report.py  # run locally in the full repository
-python -m pytest                                # run locally in the full repository
-python -m ruff check .                          # run locally in the full repository
-python scripts/run_reconcile.py --help          # run locally in the full repository
-python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31  # run locally after demo database exists
-git status                                      # expected Step 30 files only
-```
-
-Completed Step 27 files:
-
-```text
-dashboard/streamlit_app.py
-tests/test_streamlit_dashboard.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 27 summary:
-
-* Expanded `dashboard/streamlit_app.py` from a foundation shell into a read-only demo dashboard with sidebar navigation.
-* Added Streamlit navigation pages for Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline.
-* Preserved the default database path of `exports/reconcile.db`.
-* Preserved missing-database setup instructions and graceful missing-database behavior.
-* Preserved overview database counts, summary metrics, and account-balance preview behavior.
-* Added default report dates for January 2026 and a default balance-sheet as-of date of 2026-01-31.
-* Added date-range and as-of-date validation helpers that reject invalid ranges and datetime values.
-* Added read-only report-loading helpers for trial balance, income statement, balance sheet, and cash flow.
-* Kept dashboard report helpers thin by calling existing report functions in `src/reconcile/reports/`.
-* Added display formatting helpers for optional integer cents, optional boolean statuses, and report rows with cent fields.
-* Added tolerant report-row extraction for report functions that return sectioned dictionaries rather than only flat `rows` lists.
-* Added fallback cash-flow display rows from cash-flow totals when the report has totals but no detail rows.
-* Added read-only event timeline loading from `ledger_events` ordered by `event_sequence ASC`.
-* Displayed event timeline fields for sequence, type, effective date, timestamp, source, actor, correlation ID, and causation ID.
-* Displayed event payload JSON in expandable sections without replaying or mutating events.
-* Added a dashboard cash-flow limitation note: customer collections through Accounts Receivable should classify as operating cash flow, not investing.
-* Updated `tests/test_streamlit_dashboard.py` for Step 27 helper coverage.
-* Tested dashboard module import safety.
-* Tested page constants and page-rendering helper existence.
-* Tested default report dates.
-* Tested date validation and invalid date ranges.
-* Tested trial balance, income statement, balance sheet, and cash flow report loaders.
-* Tested event timeline loading, deterministic sequence ordering, expected fields, and empty event-log behavior.
-* Tested missing database behavior for new report helpers.
-* Tested cents and boolean formatters.
-* Tested JSON-serializable dashboard helper payloads.
-* Tested report helpers do not append ledger events.
-* Tested report helpers do not mutate account balances.
-* Tested event timeline loading does not mutate ledger events.
-* Tested helpers do not import bank files, run reconciliation, or write export files.
-* Did not add reconciliation review UI, categorization review UI, manual correction UI, manual confirmation/rejection UI, dashboard writeback, CI, deployment, screenshots, README polish, engine changes, new dependencies, or new accounting behavior.
-
-Commands run for Step 27:
-
-```bash
-python -m ruff check dashboard/streamlit_app.py
-python -m ruff check tests/test_streamlit_dashboard.py
-python -m pytest tests/test_streamlit_dashboard.py
-python -m ruff check .
-python -m pytest
-streamlit run dashboard/streamlit_app.py
-git status
-```
-
-Results:
-
-```text
-python -m ruff check dashboard/streamlit_app.py      # All checks passed after import ordering and helper-order fixes
-python -m ruff check tests/test_streamlit_dashboard.py # All checks passed
-python -m pytest tests/test_streamlit_dashboard.py   # 35 passed after report-row extraction and cash-flow fallback fixes
-python -m ruff check .                              # passed locally as reported
-python -m pytest                                    # passed locally as reported
-streamlit run dashboard/streamlit_app.py            # dashboard launched; all Step 27 pages showed no errors in manual smoke check
-git status                                          # initially showed dashboard/streamlit_app.py only before test and Project State updates
-```
-
-Completed Step 28 files:
-
-```text
-dashboard/streamlit_app.py
-tests/test_streamlit_dashboard.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 28 summary:
-
-* Expanded `dashboard/streamlit_app.py` navigation with Bank Reconciliation and Categorization Review pages.
-* Preserved Overview, Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Event Timeline pages.
-* Preserved the default dashboard database path of `exports/reconcile.db`.
-* Preserved graceful missing-database setup instructions.
-* Added `load_reconciliation_runs` for deterministic newest-first reconciliation run review.
-* Added `load_reconciliation_review` for selected-run match review without running reconciliation.
-* Added `load_reconciliation_match_details` for inspecting one match and its linked ledger movements.
-* Added `parse_explanation_json` to tolerate valid, missing, malformed, fuzzy, exact, and split explanation shapes.
-* Added ledger-link detail loading for journal entry IDs, journal line IDs, signed amount cents, entry dates, entry descriptions, and account code/name when available.
-* Added readable reconciliation match display fields for bank transaction date, raw description, normalized description, bank amount, match type, status, score, deltas, ledger-link count, matched entry IDs, matched line IDs, and explanation summary.
-* Added Streamlit expanders for reconciliation run configuration, explanation JSON, and linked ledger movements.
-* Added `load_categorization_review_rows` for read-only category review of imported bank transactions.
-* Added `load_categorization_review` with summary metrics for total, categorized, uncategorized, rule-based, correction-based, classifier-based, and duplicate-flagged rows.
-* Added `load_category_correction_summary` with graceful behavior when `category_corrections` does not exist.
-* Applied existing default rule-based categorization for dashboard review.
-* Applied latest category corrections when the optional correction table exists.
-* Preserved raw and normalized bank descriptions in categorization review rows.
-* Preserved duplicate group IDs in categorization review rows.
-* Clearly surfaced category, source, rule ID, reason, correction ID, correction reason, corrected timestamp, and classifier confidence fields.
-* Skipped classifier training in the dashboard review because rule and correction review was sufficient for Step 28 and avoids model persistence risk.
-* Kept the dashboard read-only.
-* Did not add writeback buttons, correction recording, match confirmation/rejection, rebuild buttons, bank import buttons, reconciliation run buttons, classifier training buttons, export generation, CI, deployment, screenshots, README polish, or new engine behavior.
-* Updated `tests/test_streamlit_dashboard.py` with Step 28 helper coverage.
-* Tested dashboard module import safety and expanded page constants.
-* Tested reconciliation empty states, run ordering, match row loading, ledger-link aggregation, match details, explanation parsing, JSON serialization, and mutation safety.
-* Tested categorization empty states, rule-based rows, correction overrides, uncategorized rows, duplicate group preservation, summary counts, missing correction table behavior, JSON serialization, and mutation safety.
-* Confirmed helper code does not append ledger events, mutate bank transactions, mutate reconciliation tables, mutate category corrections, run reconciliation, import bank files, or write export/model files in the added tests.
-
-Commands run for Step 28:
-
-```bash
-python -m py_compile /mnt/data/streamlit_app.py /mnt/data/test_streamlit_dashboard.py
-```
-
-Results:
-
-```text
-python -m py_compile /mnt/data/streamlit_app.py /mnt/data/test_streamlit_dashboard.py  # passed
-python -m pytest tests/test_streamlit_dashboard.py  # not run in sandbox; requires full local repo package
-python -m pytest                                    # not run in sandbox; requires full local repo package
-python -m ruff check .                              # not run in sandbox; ruff unavailable here
-streamlit run dashboard/streamlit_app.py            # not run in sandbox; run locally for manual smoke check
-git status                                          # not run in sandbox; run locally in the repository
-```
-
-Completed Step 18 files:
-
-```text
-src/reconcile/reconciliation/models.py
-src/reconcile/reconciliation/explanations.py
-src/reconcile/reconciliation/matcher.py
-src/reconcile/reconciliation/__init__.py
-tests/test_reconciliation_exact.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 18 summary:
-
-* Added `src/reconcile/reconciliation/models.py`.
-* Added lightweight constants for exact and unmatched match types.
-* Added lightweight constants for auto-matched, candidate, and unmatched statuses.
-* Added lightweight constant for completed reconciliation run status.
-* Added `src/reconcile/reconciliation/explanations.py`.
-* Added `build_exact_match_explanation(...)`.
-* Added `build_unmatched_explanation(...)`.
-* Kept explanations as JSON-serializable plain dictionaries.
-* Included bank transaction IDs, ledger cash movement IDs, amount cents, bank dates, and ledger entry dates in explanations where applicable.
-* Added `src/reconcile/reconciliation/matcher.py`.
-* Added `run_exact_reconciliation(connection, *, cash_account_id, statement_start_date, statement_end_date, reconciliation_run_id=None, started_at=None)`.
-* Added `list_reconciliation_matches(connection, reconciliation_run_id)`.
-* Added `get_reconciliation_run(connection, reconciliation_run_id)`.
-* Validated `cash_account_id` as a nonblank string.
-* Validated statement start and end dates as real `datetime.date` values.
-* Rejected `datetime.datetime` values for statement dates.
-* Rejected statement ranges where start date is after end date.
-* Validated provided reconciliation run IDs as nonblank strings.
-* Generated UUID-based reconciliation run IDs when no run ID is provided.
-* Inserted one reconciliation run row for each exact reconciliation run.
-* Stored run status as `completed`.
-* Stored cash account ID and statement dates on reconciliation runs.
-* Stored started and completed timestamps on reconciliation runs.
-* Stored JSON reconciliation configuration in `config_json`.
-* Converted duplicate reconciliation run IDs into `ValidationError`.
-* Selected bank transactions within the statement date range, inclusive.
-* Used existing signed integer bank amounts from `bank_transactions.amount_cents`.
-* Included duplicate-flagged bank transactions in inspection.
-* Blocked duplicate-flagged bank transactions from automatic matching.
-* Used `extract_ledger_cash_movements` for ledger-side selection.
-* Used Step 17 default effective-only behavior for reversed entries.
-* Did not reimplement cash movement extraction inside the matcher.
-* Matched exact candidates only when bank amount equals ledger amount and bank transaction date equals ledger entry date.
-* Used exact cent equality only.
-* Used exact date equality only.
-* Added deterministic matching order by bank transaction date, bank transaction ID, ledger entry date, and ledger movement ID.
-* Enforced that one ledger cash movement can be used by at most one auto-match in the same run.
-* Enforced that one bank transaction receives at most one reconciliation match record in Step 18.
-* Created exact auto-match rows when exactly one unused ledger movement matched a bank transaction.
-* Created unmatched rows when no ledger movement matched.
-* Created candidate rows when multiple exact ledger candidates existed for one bank transaction.
-* Created candidate rows when a matching ledger movement was already consumed by an earlier bank transaction.
-* Created candidate rows when a duplicate-flagged bank transaction had an exact candidate.
-* Stored exact auto-match rows with `match_type='exact'`, `score=100.0`, zero amount delta, zero date delta, and `status='auto_matched'`.
-* Stored unmatched rows with `match_type='unmatched'`, `score=0.0`, bank amount as amount delta, `date_delta_days=NULL`, and `status='unmatched'`.
-* Stored candidate rows with clear explanation JSON describing why no unsafe auto-match was made.
-* Created ledger-link rows for exact auto-matches only.
-* Linked exact auto-matches to matched journal entry IDs, journal entry line IDs, and signed amount cents.
-* Did not create ledger-link rows for unmatched rows.
-* Did not create ledger-link rows for candidate rows.
-* Committed reconciliation writes after successful completion.
-* Rolled back reconciliation writes if a failure occurred during the run.
-* Did not append ledger events.
-* Did not alter accounts.
-* Did not alter journal entries.
-* Did not alter journal entry lines.
-* Did not alter account balances.
-* Did not alter bank transactions.
-* Updated `src/reconcile/reconciliation/__init__.py` to preserve Step 17 exports and add Step 18 public exports.
-* Added `tests/test_reconciliation_exact.py`.
-* Tested reconciliation run creation.
-* Tested provided reconciliation run IDs.
-* Tested generated reconciliation run IDs.
-* Tested duplicate reconciliation run ID validation.
-* Tested ISO date storage.
-* Tested completed run status.
-* Tested JSON run configuration.
-* Tested summary counts.
-* Tested exact deposit matching to debit-to-Cash movements.
-* Tested exact withdrawal matching to credit-from-Cash movements.
-* Tested amount mismatch unmatched behavior.
-* Tested date mismatch unmatched behavior.
-* Tested exact match record type, status, score, amount delta, date delta, and explanation JSON.
-* Tested exact auto-match ledger-link rows.
-* Tested unmatched records, unmatched explanations, and absence of ledger links.
-* Tested one-to-one ledger movement safety.
-* Tested multiple exact ledger candidates are not auto-matched.
-* Tested duplicate-flagged bank transactions are not auto-matched.
-* Tested deterministic matching behavior.
-* Tested statement date range filtering for start date, end date, before range, and after range.
-* Tested ledger movements outside the statement range are ignored.
-* Tested invalid statement dates and invalid statement ranges.
-* Tested reconciliation does not append ledger events.
-* Tested reconciliation does not modify bank transaction rows.
-* Tested reconciliation does not modify accounting projection tables.
-* Tested reconciliation writes only reconciliation tables.
-* Did not add fuzzy scoring, amount tolerance, fuzzy date windows, description similarity, split matching, manual confirmation/rejection, categorization, dashboard, full CLI workflow, CSV exports, cash flow, or new accounting features.
-
-Commands run for Step 18:
-
-```bash
-python -m pytest
-python -m ruff check .
-```
-
-Results:
-
-```text
-python -m pytest        # 441 passed in 72.82s (0:01:12)
-python -m ruff check .  # All checks passed!
-```
-
-Completed Step 19 files:
-
-```text
-src/reconcile/reconciliation/scoring.py
-src/reconcile/reconciliation/models.py
-src/reconcile/reconciliation/explanations.py
-src/reconcile/reconciliation/matcher.py
-src/reconcile/reconciliation/__init__.py
-tests/test_reconciliation_fuzzy.py
-docs/Reconciliation_Design.md
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 19 summary:
-
-* Added `src/reconcile/reconciliation/scoring.py`.
-* Added `days_between`.
-* Added `score_amount_match` with exact, tolerance, sign, and invalid-input handling.
-* Added `score_date_match` with exact, date-window, and invalid-input handling.
-* Added `score_description_match` with deterministic standard-library normalization and token-overlap scoring.
-* Added `score_reconciliation_candidate` using amount, date, description, and duplicate-penalty components.
-* Added fuzzy match type and ambiguous match status constants.
-* Added `build_fuzzy_match_explanation` for JSON-serializable fuzzy match explanations.
-* Preserved Step 18 exact and unmatched explanation builders.
-* Added `run_fuzzy_reconciliation`.
-* Preserved `run_exact_reconciliation` behavior.
-* Stored fuzzy reconciliation run configuration in `config_json`.
-* Selected bank transactions inside the statement date range.
-* Used `extract_ledger_cash_movements` for ledger-side cash movement selection.
-* Generated fuzzy candidates only when signs match, amount delta is within tolerance, and date delta is within the configured window.
-* Scored fuzzy candidates with amount, date, description, amount delta, date delta, and duplicate penalty details.
-* Added fuzzy auto-match threshold behavior.
-* Added fuzzy candidate threshold behavior.
-* Added ambiguous status behavior when high-scoring top candidates are too close.
-* Blocked duplicate-flagged bank transactions from fuzzy auto-matching.
-* Created ledger-link rows for fuzzy auto-matches only.
-* Confirmed candidate, ambiguous, and unmatched fuzzy records do not create ledger-link rows.
-* Enforced that one ledger cash movement can be consumed by at most one fuzzy auto-match in the same run.
-* Added deterministic fuzzy candidate ordering.
-* Added fuzzy reconciliation summary counts.
-* Added `tests/test_reconciliation_fuzzy.py`.
-* Tested amount scoring, date scoring, description scoring, candidate scoring, duplicate penalties, score clamping, fuzzy auto-matches, candidates, ambiguity handling, duplicate handling, one-to-one safety, run configuration, validation errors, and mutation safety.
-* Updated `docs/Reconciliation_Design.md` to document implemented exact and fuzzy reconciliation behavior.
-* Documented that split matching remains future work.
-* Did not add split matching, manual review, categorization, dashboard, CLI integration, report exports, cash flow, or new accounting features.
-
-Commands run for Step 19:
-
-```bash
-python -m pytest tests/test_reconciliation_fuzzy.py
-python -m ruff check . --fix
-python -m ruff check .
-python -m pytest
-git status
-```
-
-Results:
-
-```text
-python -m pytest tests/test_reconciliation_fuzzy.py  # passed locally
-python -m ruff check . --fix                        # fixed import ordering
-python -m ruff check .                              # All checks passed
-python -m pytest                                    # passed locally
-git status                                          # expected Step 19 files only
-```
-
-Completed Step 20 files:
-
-```text
-src/reconcile/reconciliation/splits.py
-src/reconcile/reconciliation/models.py
-src/reconcile/reconciliation/explanations.py
-src/reconcile/reconciliation/matcher.py
-src/reconcile/reconciliation/__init__.py
-tests/test_reconciliation_splits.py
-docs/Reconciliation_Design.md
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 20 summary:
-
-* Added `src/reconcile/reconciliation/splits.py`.
-* Added `find_split_candidates(...)` for bounded two- and three-component split candidate discovery.
-* Added `score_split_candidate(...)` for scoring one bank transaction against multiple ledger cash movements.
-* Limited split candidates to two or three ledger cash movements only.
-* Rejected one-component split candidates.
-* Rejected more-than-three-component split candidates.
-* Rejected invalid `max_components` values below 2 or above 3.
-* Rejected negative amount tolerances, date windows, and split penalties.
-* Used standard-library deterministic combination search only.
-* Required all split component movements to have the same nonzero sign.
-* Rejected opposite-sign bank/component combinations.
-* Required the signed component total to match the bank transaction amount within tolerance.
-* Used integer cents for all money calculations.
-* Compared each component date to the bank transaction date with absolute day deltas.
-* Required every component movement to be inside the configured date window.
-* Stored component-level date deltas in split candidate explanations.
-* Stored summary date delta using the maximum absolute component date delta.
-* Scored split candidates with `amount_score * 0.70 + date_score * 0.25 + description_score * 0.05 - split_penalty`.
-* Used amount scoring against the summed component total.
-* Used conservative split date scoring with the minimum component date score.
-* Used best-component description scoring for split description support.
-* Clamped split scores between 0.0 and 100.0.
-* Returned split candidate result dictionaries with scores, deltas, component totals, component IDs, component details, and JSON-serializable score explanations.
-* Added deterministic split candidate ordering by score, amount delta, date delta, component count, and movement IDs.
-* Updated `src/reconcile/reconciliation/models.py` with `MATCH_TYPE_SPLIT = "split"`.
-* Preserved exact, fuzzy, unmatched, status, and run-status constants.
-* Updated `src/reconcile/reconciliation/explanations.py` with `build_split_match_explanation(...)`.
-* Split explanations include candidate score, amount score, date score, description score, split penalty, amount delta, date delta, component count, component total, component movement IDs, component details, decision status, auto-match flag, and reason text.
-* Updated `src/reconcile/reconciliation/matcher.py` with `run_split_reconciliation(...)`.
-* Reused existing reconciliation validation, run insertion, match insertion, ledger-link insertion, and deterministic matching patterns.
-* Stored split reconciliation run rows with completed status.
-* Stored split run configuration in `config_json`.
-* Selected imported bank transactions in the requested statement date range.
-* Used Step 17 `extract_ledger_cash_movements` for ledger-side cash movement extraction.
-* Generated split candidates from available ledger cash movements.
-* Stored split reconciliation match rows with split explanation JSON.
-* Created split ledger-link rows only for auto-matches.
-* Created one ledger-link row for each component movement in a split auto-match.
-* Did not create ledger-link rows for split candidate, ambiguous, or unmatched records.
-* Applied split auto-match threshold, candidate threshold, and ambiguity gap decision rules.
-* Created `auto_matched` rows only when the top split candidate met the auto threshold and had a sufficient gap from the second candidate.
-* Created `ambiguous` rows when top split candidates were too close to auto-match safely.
-* Created `candidate` rows when top split candidates met candidate threshold but not auto-match threshold.
-* Created `unmatched` rows when no split candidate existed or the best split candidate was below candidate threshold.
-* Blocked duplicate-flagged bank transactions from split auto-matching.
-* Ensured candidate and ambiguous split rows do not consume ledger movements.
-* Ensured a ledger cash movement can be consumed by at most one split auto-match in the same run.
-* Ensured each bank transaction receives at most one split reconciliation match record in a split run.
-* Preserved `run_exact_reconciliation`.
-* Preserved `run_fuzzy_reconciliation`.
-* Did not combine exact, fuzzy, and split workflows into one master function.
-* Updated `src/reconcile/reconciliation/__init__.py` to export split helpers and split reconciliation runner while preserving existing Step 17 through Step 19 exports.
-* Added `tests/test_reconciliation_splits.py`.
-* Tested two-component split candidates.
-* Tested three-component split candidates.
-* Tested that one-component and four-component split candidates are not returned.
-* Tested mixed-sign and opposite-sign rejection.
-* Tested amount tolerance, date window, scoring, split penalty, candidate shape, component details, and deterministic ordering.
-* Tested invalid helper inputs and invalid split run configuration values.
-* Tested split auto-matching for two and three ledger movements.
-* Tested within-tolerance split matching.
-* Tested wrong-sign, out-of-tolerance, and out-of-window split behavior.
-* Tested auto-match, candidate, ambiguous, and unmatched decision paths.
-* Tested duplicate-flagged bank rows do not auto-match.
-* Tested ledger-link creation for split auto-matches only.
-* Tested component ledger movements are not reused across split auto-matches.
-* Tested candidate and ambiguous rows do not consume component movements.
-* Tested deterministic split matching behavior.
-* Tested split reconciliation run rows, config JSON, provided run IDs, generated run IDs, and duplicate run ID validation.
-* Tested split reconciliation mutation safety for ledger events, bank rows, and accounting projection tables.
-* Updated `docs/Reconciliation_Design.md` to document implemented split matching behavior.
-* Documented split two- and three-component search, same-sign rule, amount tolerance, date window, scoring formula, split penalty, statuses, ledger-link behavior, and out-of-scope unlimited subset-sum/manual review UI.
-* Did not add CLI integration, categorization, dashboard, CSV export, cash flow reporting, manual confirmation/rejection, bank import events, or new accounting features.
-
-Commands run for Step 20:
-
-```bash
-python -m ruff check .
-python -m ruff check . --fix
-python -m pytest tests/test_reconciliation_splits.py
-python -m pytest
-git status
-```
-
-Results:
-
-```text
-python -m ruff check .                              # initially found unused imports and line-length issues
-python -m ruff check . --fix                        # removed safe unused imports
-python -m pytest tests/test_reconciliation_splits.py # 52 passed after threshold adjustment
-python -m ruff check .                              # All checks passed locally
-python -m pytest                                    # passed locally
-git status                                          # expected Step 20 files only
-```
-
-Completed Step 22 files:
-
-```text
-src/reconcile/reports/export.py
-src/reconcile/reports/__init__.py
-src/reconcile/cli.py
-tests/test_report_exports.py
-tests/test_cli.py
+docs/assets/dashboard-overview.png
+docs/assets/dashboard-reconciliation.png
 examples/sample_output/trial_balance.csv
 examples/sample_output/income_statement.csv
 examples/sample_output/balance_sheet.csv
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 22 summary:
-
-* Added `src/reconcile/reports/export.py`.
-* Added `export_trial_balance_csv(connection, output_path)`.
-* Added `export_income_statement_csv(connection, *, start_date, end_date, output_path)`.
-* Added `export_balance_sheet_csv(connection, *, as_of_date, output_path)`.
-* Added `export_reconciliation_results_csv(connection, *, reconciliation_run_id, output_path)`.
-* Added `export_all_reports(connection, *, output_dir, income_start_date, income_end_date, balance_sheet_as_of_date, reconciliation_run_id=None)`.
-* Used standard-library CSV writing with `csv.DictWriter`.
-* Used `pathlib.Path` and created output parent directories as needed.
-* Returned JSON-serializable summary dictionaries with string file paths and data-row counts.
-* Kept export functions read-only.
-* Confirmed export functions do not append ledger events.
-* Confirmed export functions do not mutate accounts, journal entries, journal lines, account balances, bank transactions, reconciliation runs, reconciliation matches, or reconciliation ledger links.
-* Exported trial balance rows with account identity, account type, normal balance, debit totals, credit totals, ending debit balances, and ending credit balances.
-* Kept trial balance totals in the returned summary instead of appending a totals row to the CSV.
-* Exported income statement rows with `section` values of `revenue` and `expense`.
-* Kept income statement totals in the returned summary instead of appending totals rows to the CSV.
-* Exported balance sheet rows with `section` values of `asset`, `liability`, and `equity`.
-* Included Current Period Net Income as a separate equity row in the balance sheet CSV.
-* Kept balance sheet totals in the returned summary instead of appending totals rows to the CSV.
-* Exported reconciliation results by joining `reconciliation_matches` to `bank_transactions`.
-* Aggregated `reconciliation_match_ledger_links` into deterministic delimiter-separated ledger entry and line ID fields.
-* Exported one reconciliation CSV row per reconciliation match.
-* Preserved stored reconciliation explanation JSON in the export.
-* Validated blank reconciliation run IDs and missing reconciliation run IDs with `ValidationError`.
-* Implemented `export_all_reports` output filenames:
-
-```text
-trial_balance.csv
-income_statement.csv
-balance_sheet.csv
-reconciliation_results.csv
-```
-
-* Skipped `reconciliation_results.csv` in `export_all_reports` when no reconciliation run ID was provided.
-* Updated `src/reconcile/reports/__init__.py` to export Step 22 export helpers while preserving existing report exports.
-* Added `export-reports` as a top-level CLI subcommand.
-* Added CLI support for `--db-path`, `--output-dir`, `--from`, `--to`, `--as-of`, and optional `--reconciliation-run-id`.
-* Reused the existing CLI ISO date parser for export date arguments.
-* Kept CLI export behavior as a thin wrapper over `export_all_reports`.
-* Printed concise CLI success output with generated paths and row counts.
-* Added `tests/test_report_exports.py`.
-* Tested trial balance CSV file creation, parent directory creation, header columns, data-row counts, deterministic account ordering, summary totals, balanced status, and mutation safety.
-* Tested income statement CSV headers, revenue and expense sections, totals, net income, and invalid date ranges.
-* Tested balance sheet CSV headers, asset/liability/equity sections, Current Period Net Income row, totals, balanced status, and invalid as-of dates.
-* Tested reconciliation result CSV headers, bank transaction fields, match fields, score and delta fields, explanation JSON, ledger link fields, missing run IDs, and blank run IDs.
-* Tested `export_all_reports` with and without reconciliation run IDs.
-* Updated `tests/test_cli.py` with `export-reports` command coverage.
-* Tested CLI export success after demo seeding.
-* Tested custom export output directories.
-* Tested CLI reconciliation export when a run ID is provided.
-* Tested invalid export date arguments return nonzero and print clear stderr.
-* Generated fake sample output CSVs under `examples/sample_output/`.
-* Did not commit `exports/reconcile.db`.
-* Did not add real bank data or private financial data.
-* Did not add cash flow, categorization, Streamlit dashboard, CI, manual reconciliation confirmation/rejection, Excel export, JSON export, PDF export, or new accounting behavior.
-
-Commands run for Step 22:
-
-```bash
-python scripts/run_reconcile.py init-db --db-path exports/reconcile.db
-python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db
-python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
-python -m pytest
-python -m ruff check .
-```
-
-Results:
-
-```text
-python scripts/run_reconcile.py init-db --db-path exports/reconcile.db  # Initialized database
-python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db # reported acct-cash already existed because the local demo database was already seeded
-python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
-# Exported reports to: examples\sample_output
-# trial_balance: examples\sample_output\trial_balance.csv (9 rows)
-# income_statement: examples\sample_output\income_statement.csv (3 rows)
-# balance_sheet: examples\sample_output\balance_sheet.csv (5 rows)
-# reconciliation_results: skipped
-python -m pytest        # passed locally
-python -m ruff check .  # All checks passed locally
-```
-
-Completed Step 23 files:
-
-```text
-src/reconcile/categorization/__init__.py
-src/reconcile/categorization/rules.py
-tests/test_categorization_rules.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 24 files:
-
-```text
-src/reconcile/categorization/corrections.py
-src/reconcile/categorization/classifier.py
-src/reconcile/categorization/__init__.py
-tests/test_categorization_corrections.py
-tests/test_categorization_classifier.py
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 24 summary:
-
-* Added `src/reconcile/categorization/corrections.py`.
-* Added `initialize_categorization_schema(connection)` to create `category_corrections` idempotently.
-* Added `record_category_correction(...)` for append-only user category corrections.
-* Validated bank transaction IDs, corrected categories, optional corrected-by values, optional reasons, and optional ISO-like correction timestamps.
-* Required corrections to reference existing bank transactions.
-* Generated UUID-based correction IDs.
-* Preserved explicit correction timestamps and populated omitted timestamps with current UTC timestamps.
-* Added `list_category_corrections(...)` with deterministic ordering and optional bank transaction filtering.
-* Added `latest_category_correction(...)` using deterministic newest-correction ordering.
-* Added `training_examples_from_corrections(...)` by joining corrections to imported bank transactions.
-* Preferred normalized descriptions as classifier text and fell back to raw descriptions.
-* Preserved signed integer `amount_cents` in training examples.
-* Added `apply_corrections_to_categorized_results(...)` so latest corrections override existing categorized result dictionaries without mutating inputs.
-* Added `src/reconcile/categorization/classifier.py`.
-* Implemented the optional classifier as a deterministic standard-library nearest-token-overlap classifier.
-* Did not add scikit-learn or any other dependency in Step 24.
-* Added `train_category_classifier(...)` with validation for empty, malformed, and single-category training data.
-* Added `predict_category(...)` and `predict_categories(...)` with confidence threshold handling.
-* Added low-confidence uncategorized behavior with clear classifier confidence reasons.
-* Added `categorize_with_rules_corrections_and_classifier(...)` with final precedence: correction, rule, classifier, uncategorized.
-* Confirmed corrections override rules and classifier predictions.
-* Confirmed rules override classifier predictions.
-* Confirmed classifier runs only when no correction exists and no rule matches.
-* Updated `src/reconcile/categorization/__init__.py` to preserve Step 23 exports and add Step 24 correction/classifier exports.
-* Added `tests/test_categorization_corrections.py`.
-* Added `tests/test_categorization_classifier.py`.
-* Tested correction schema creation, idempotency, append-only recording, listing, latest lookup, training example extraction, correction application, validation errors, ordering, and mutation safety.
-* Tested classifier training validation, prediction, low-confidence behavior, confidence thresholds, JSON serialization, prediction ordering, precedence, no-mutation behavior, no-file-write behavior, and no-database-touch behavior.
-* Did not add dashboard categorization review, CLI categorization workflow, cash flow, Streamlit dashboard, CI, manual reconciliation confirmation/rejection, external APIs, LLM categorization, cloud model calls, reconciliation changes, report export changes, or new accounting behavior.
-
-Commands run for Step 24:
-
-```bash
-python -m pytest tests/test_categorization_classifier.py
-python -m pytest
-python -m ruff check .
-git status
-```
-
-Results:
-
-```text
-python -m pytest tests/test_categorization_classifier.py  # 23 passed after confidence threshold fix
-python -m pytest                                          # all tests passed locally
-python -m ruff check .                                    # All checks passed after line-length cleanup
-git status                                                # expected Step 24 files only
-```
-
-Completed Step 23 summary:
-
-* Added `src/reconcile/categorization/__init__.py`.
-* Added `src/reconcile/categorization/rules.py`.
-* Added immutable `CategoryRule` dataclass validation.
-* Added `normalize_rule_text`.
-* Added `match_category_rule`.
-* Added `categorize_transaction`.
-* Added `categorize_transactions`.
-* Added `default_category_rules`.
-* Added read-only `load_bank_transactions_for_categorization`.
-* Rule matching supports normalized-description matching, raw-description fallback, phrase matching, any-token matching, all-token matching, amount ranges, and positive/negative/any amount signs.
-* Categorization results are plain JSON-serializable dictionaries.
-* Categorized results include bank transaction ID, category, category source, category rule ID, category reason, matched rule priority, matched description, and amount cents.
-* Uncategorized results use `category=None`, `category_source=None`, `category_rule_id=None`, and a clear reason.
-* Rule application is deterministic: highest priority wins, then tied priorities sort by rule ID.
-* Categorization does not mutate input transaction dictionaries.
-* Categorization does not write to SQLite.
-* The read helper preserves raw descriptions, normalized descriptions, signed integer amounts, and deterministic ordering.
-* Added `tests/test_categorization_rules.py`.
-* Tested rule validation errors, text normalization, phrase/token/amount/sign matching, categorization ordering, default rules, transaction validation, read helper behavior, and mutation safety.
-* Did not add correction storage, categorization persistence, local ML classifier, scikit-learn, CLI categorization workflow, dashboard review UI, cash flow, or new accounting behavior.
-
-Commands run for Step 23:
-
-```bash
-python -m pytest
-python -m ruff check .
-git status
-```
-
-Results:
-
-```text
-python -m pytest        # passed locally
-python -m ruff check .  # All checks passed locally
-git status              # expected Step 23 files only
-```
-
-Completed Step 25 files:
-
-```text
-src/reconcile/reports/cash_flow.py
-src/reconcile/reports/__init__.py
-src/reconcile/reports/export.py
-src/reconcile/cli.py
-tests/test_cash_flow_report.py
-tests/test_report_exports.py
-tests/test_cli.py
 examples/sample_output/cash_flow.csv
-docs/Reconcile_Project_State.md
+.gitignore
 ```
 
-Completed Step 25 summary:
+Completed Step 31 summary:
 
-* Added `src/reconcile/reports/cash_flow.py`.
-* Added `generate_cash_flow_statement(connection, *, start_date, end_date, cash_account_id=None)`.
-* Added `cash_flow_totals(statement)`.
-* Added `classify_cash_flow_section(counterparty_account_type, counterparty_account_code=None, counterparty_account_name=None)`.
-* Implemented direct-method cash flow reporting from existing posted journal entries and journal lines.
-* Identified cash-like accounts from selected `cash_account_id` or from asset/debit accounts with code `1000` or names containing cash, checking, or bank.
-* Used the cash flow sign convention where debit to cash is an inflow and credit to cash is an outflow.
-* Classified revenue and expense counterparties as operating.
-* Classified non-cash asset counterparties as investing.
-* Classified liability and equity counterparties as financing.
-* Validated report dates as real `datetime.date` values and rejected `datetime.datetime` values.
-* Rejected date ranges where start date is after end date.
-* Calculated beginning cash from posted cash activity before the start date.
-* Calculated ending cash from posted cash activity through the end date.
-* Calculated operating, investing, financing, and net cash change totals.
-* Added `cash_balances_tie` to verify beginning cash plus net cash change equals ending cash.
-* Kept report rows JSON-serializable.
-* Excluded pure cash-to-cash transfers from operating, investing, and financing activity.
-* Supported selected cash account reporting with validation for missing and non-cash accounts.
-* Added proportional allocation for multiple non-cash counterparties when needed.
-* Updated `src/reconcile/reports/__init__.py` to export the cash flow report helpers.
-* Added `export_cash_flow_csv(...)` to `src/reconcile/reports/export.py`.
-* Added official `cash_flow.csv` output to `export_all_reports(...)`.
-* Kept cash flow CSV exports to section rows only, with totals returned in the summary.
-* Updated CLI `report cash-flow` command.
-* Updated CLI `export-reports` output so cash flow export is shown with the other report exports.
-* Added `tests/test_cash_flow_report.py`.
-* Updated `tests/test_report_exports.py` for cash flow CSV behavior and `export_all_reports`.
-* Updated `tests/test_cli.py` for `report cash-flow` and cash flow export behavior.
-* Generated fake sample output at `examples/sample_output/cash_flow.csv`.
-* Confirmed cash flow generation and export are read-only and mutation-safe.
-* Did not add Streamlit, dashboard pages, indirect-method cash flow, closing entries, retained earnings, reconciliation changes, categorization changes, CI, Excel export, JSON export, PDF export, new dependencies, or new accounting behavior.
+* Added MIT license text for Nathan Pounds.
+* Added a short release-candidate changelog.
+* Added concise contribution guidance for a solo portfolio project.
+* Updated README current status to Step 31 complete, 100% completion, and current validation.
+* Added dashboard screenshots to the README.
+* Added a visibility note explaining that this Project State file is a long build journal.
+* Updated the step plan so Steps 0 through 31 are complete.
+* Corrected the stale Accounts Receivable cash-flow sample-output row.
+* Kept the release-candidate scope honest: no production readiness, deployment,
+  authentication, real data support, or dashboard writeback is claimed.
 
-Commands run for Step 25:
+Commands run for Step 31:
 
 ```bash
-python -m ruff check .
 python -m pytest
-python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
-python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
-git status
-```
-
-Results:
-
-```text
-python -m ruff check .  # All checks passed
-python -m pytest        # 709 passed in the final full test run
-python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
-# Cash Flow Statement: 2026-01-01 to 2026-01-31
-# Operating cash flow: -950.00
-# Investing cash flow: 1200.00
-# Financing cash flow: 5000.00
-# Net cash change: 5250.00
-# Beginning cash: 0.00
-# Ending cash: 5250.00
-# Cash balances tie: True
-python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
-# Exported reports to: examples\sample_output
-# trial_balance: examples\sample_output\trial_balance.csv (9 rows)
-# income_statement: examples\sample_output\income_statement.csv (3 rows)
-# balance_sheet: examples\sample_output\balance_sheet.csv (5 rows)
-# cash_flow: examples\sample_output\cash_flow.csv (4 rows)
-# reconciliation_results: skipped
-git status  # expected Step 25 files only before Project State update
-```
-
-Completed Step 26 files:
-
-```text
-dashboard/streamlit_app.py
-tests/test_streamlit_dashboard.py
-pyproject.toml
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 26 summary:
-
-* Added `streamlit` as a project dependency.
-* Added `dashboard/streamlit_app.py`.
-* Added a safe `main()` entrypoint guarded by `if __name__ == "__main__"`.
-* Added a Streamlit page title of `Reconcile`.
-* Added the subtitle `Local-first event-sourced accounting engine`.
-* Added a sidebar database path input.
-* Defaulted the dashboard database path to `exports/reconcile.db`.
-* Added a sidebar note that the dashboard expects a local demo database.
-* Added friendly missing-database setup instructions.
-* Kept setup instructions as display text only.
-* Did not execute CLI commands from Streamlit.
-* Added `database_exists`.
-* Added `load_database_counts`.
-* Added `load_trial_balance_preview`.
-* Added `load_dashboard_summary`.
-* Added `format_cents_for_dashboard`.
-* Used `pathlib.Path` for path handling.
-* Checked database existence before opening a connection.
-* Avoided creating a database merely by launching the dashboard.
-* Used `reconcile.db.connect` for existing SQLite database reads.
-* Added graceful handling for missing database files.
-* Added graceful handling for missing schema tables.
-* Added graceful handling for empty databases.
-* Added table counts for core ledger, accounting, bank, reconciliation, and categorization tables.
-* Used existing `generate_trial_balance` and `trial_balance_totals` where practical.
-* Displayed high-level summary metrics.
-* Displayed a small account/trial-balance preview.
-* Kept dashboard logic thin.
-* Kept business logic inside existing package modules.
-* Did not mutate the database.
-* Did not append events.
-* Did not import bank files.
-* Did not rebuild projections.
-* Did not run reconciliation.
-* Did not train categorization classifiers.
-* Did not write export files.
-* Added `tests/test_streamlit_dashboard.py`.
-* Tested missing and existing database status.
-* Tested table counts for missing, empty, partial, and demo-like databases.
-* Tested trial balance preview behavior.
-* Tested dashboard summary JSON serialization.
-* Tested empty database summary behavior.
-* Tested missing optional tables do not crash helper functions.
-* Tested cents formatting for positive, negative, and zero values.
-* Tested importing the dashboard module does not launch the app.
-* Tested helper functions do not append ledger events.
-* Tested helper functions do not mutate account balances.
-* Tested helper functions do not import bank files.
-* Tested helper functions do not run reconciliation.
-* Tested helper functions do not write exports.
-* Did not add full dashboard report pages, event timeline, reconciliation review UI, categorization review UI, CI, deployment, screenshots, README polish, or new accounting behavior.
-
-Commands run for Step 26:
-
-```bash
-python -m pip install -e ".[dev]"
-python -m pytest tests/test_streamlit_dashboard.py
-python -m ruff check . --fix
 python -m ruff check .
+git status
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
 streamlit run dashboard/streamlit_app.py
-git status
 ```
 
 Results:
 
 ```text
-python -m pip install -e ".[dev]"              # Streamlit installed through project dependency
-python -m pytest tests/test_streamlit_dashboard.py # 16 passed after empty cash balance fix
-python -m ruff check . --fix                    # fixed one safe Ruff issue; remaining line lengths were fixed manually
-python -m ruff check .                          # expected to pass after line-length cleanup
-streamlit run dashboard/streamlit_app.py        # launched locally; stopped from PowerShell with Ctrl+C
-git status                                      # expected Step 26 files shown
-```
-
-Completed Step 29 files:
-
-```text
-.github/workflows/ci.yml
-docs/Reconcile_Project_State.md
-```
-
-Completed Step 29 summary:
-
-* Added `.github/workflows/ci.yml`.
-* Added a GitHub Actions workflow named `CI`.
-* Configured CI to run on `push`.
-* Configured CI to run on `pull_request`.
-* Configured CI to run on `ubuntu-latest`.
-* Used `actions/checkout@v4`.
-* Used `actions/setup-python@v5`.
-* Used Python `3.13` for stable GitHub Actions compatibility.
-* Installed the project from `pyproject.toml` using editable install with dev extras.
-* Ran `python -m ruff check .` before tests.
-* Ran the full test suite with `python -m pytest`.
-* Validated the workflow file is present and readable.
-* Kept CI simple and readable.
-* Did not add dependency caching, OS matrices, deployment, Streamlit launch checks, coverage services, mypy, pre-commit, Docker, new tests, new dependencies, or app behavior changes.
-* Did not add the README CI badge in Step 29; the reference-style badge is deferred to Step 30 README polish.
-* Did not commit a local SQLite database or generated private/local artifacts.
-* Local validation passed as reported.
-* GitHub Actions validation passed on GitHub after push.
-
-Commands run for Step 29:
-
-```bash
-python -m pytest
-python -m ruff check .
-git status
-python -c "from pathlib import Path; print(Path('.github/workflows/ci.yml').read_text())"
-```
-
-Results:
-
-```text
-python -m pytest        # passed locally as reported
+python -m pytest        # 764 passed locally as reported
 python -m ruff check .  # All checks passed locally as reported
-git status              # expected Step 29 files only as reported
-workflow YAML readback  # printed `.github/workflows/ci.yml` successfully
-```
-
-GitHub Actions result:
-
-```text
-Passed on GitHub Actions after push.
+GitHub Actions CI       # passing after Step 30/31 validation as reported
+cash_flow.csv           # corrected so JE-004 / Accounts Receivable is operating
+sample outputs          # regenerated or corrected using fake demo data only
+dashboard screenshots   # added under docs/assets/ and embedded in README.md
+exports/reconcile.db    # generated local database; do not commit
 ```
 
 Next planned step:
 
-Step 31 — Final portfolio polish and release cleanup.
-
-Step 31 status: Not started.
+No next implementation step is planned for the portfolio MVP. Future enhancements should be tracked separately from the completed release-candidate scope.
 
 ---
 
@@ -6199,131 +5239,128 @@ Add CI workflow
 
 ### Step 30 — Polish README and architecture docs
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
 * Make the project understandable and portfolio-ready.
 
-Expected work:
+Completed work:
 
-* Polish README quickstart.
-* Add the reference-style GitHub Actions CI badge under the main README heading.
-* Add architecture overview.
-* Add event model explanation.
-* Add accounting invariant explanation.
-* Add reconciliation design explanation.
-* Add dashboard screenshots if available.
-* Add limitations and future improvements.
-* Confirm docs match actual behavior.
+* Polished README and architecture documentation.
+* Added the reference-style GitHub Actions CI badge under the main README heading.
+* Updated event model documentation to distinguish event-sourced ledger behavior
+  from table-backed MVP workflows.
+* Updated accounting invariant documentation.
+* Updated reconciliation documentation for implemented exact, fuzzy, split,
+  export, and read-only dashboard review behavior.
+* Updated project state and step plan.
+* Refined AR/AP cash-flow classification with focused tests.
+* Did not add screenshots in Step 30.
 
-Allowed files to create/edit:
-
-```text
-README.md
-docs/Architecture.md
-docs/Event_Model.md
-docs/Accounting_Invariants.md
-docs/Reconciliation_Design.md
-docs/Step_Plan.md
-docs/Reconcile_Project_State.md
-```
-
-Do not implement yet:
-
-* New major features
-* README fiction
-
-Commands to run:
+Commands run:
 
 ```bash
+python -m pytest tests/test_cash_flow_report.py
 python -m pytest
 python -m ruff check .
+python scripts/run_reconcile.py --help
+python scripts/run_reconcile.py report cash-flow --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
+git status
 ```
-
-Definition of done:
-
-* README quickstart works.
-* Docs match actual code.
-* Architecture is clear.
-* Limitations are honest.
-* Tests pass.
-* Ruff passes.
 
 Suggested commit message:
 
 ```text
-Polish Reconcile documentation
+Polish docs and refine cash flow classification
 ```
 
 ---
 
 ### Step 31 — Final portfolio polish and release cleanup
 
-Status: Not started.
+Status: Complete.
 
 Goal:
 
-* Prepare Reconcile as a finished portfolio project.
+* Prepare Reconcile as a finished portfolio release-candidate project.
 
-Expected work:
+Completed work:
 
-* Final README review.
-* Final docs review.
-* Final CHANGELOG update.
-* Final CONTRIBUTING update.
-* Final CI check.
-* Final test pass.
-* Final ruff pass.
-* Manual smoke checks.
-* Generate final fake sample outputs.
-* Confirm no secrets or real data.
-* Confirm final git status is clean.
-* Mark project complete in this Project State file.
+* Added `LICENSE` using the MIT license.
+* Added `CHANGELOG.md` with a short `0.1.0` portfolio release-candidate section.
+* Added `CONTRIBUTING.md` with solo-project contribution guidance, local setup,
+  test commands, Ruff command, and fake-data safety guidance.
+* Updated README current status to Step 31 complete.
+* Updated README completion percentage to 100%.
+* Updated README validation status to 764 tests passing locally, Ruff clean, and
+  GitHub Actions CI passing.
+* Added dashboard screenshots under `docs/assets/` and embedded them in
+  `README.md`.
+* Added a Project State visibility note explaining that the file is a long build
+  journal, not a quick overview.
+* Updated Step Plan to mark Steps 0 through 31 complete.
+* Corrected stale sample cash-flow output so `JE-004` / Accounts Receivable is
+  operating cash flow rather than investing cash flow.
+* Confirmed `exports/reconcile.db` is local generated output and should not be
+  committed.
 
-Allowed files to create/edit:
+Allowed files created or edited:
 
 ```text
 README.md
+LICENSE
 CHANGELOG.md
 CONTRIBUTING.md
 docs/Reconcile_Project_State.md
-examples/sample_output/
+docs/Step_Plan.md
+docs/assets/dashboard-overview.png
+docs/assets/dashboard-reconciliation.png
+examples/sample_output/trial_balance.csv
+examples/sample_output/income_statement.csv
+examples/sample_output/balance_sheet.csv
+examples/sample_output/cash_flow.csv
+.gitignore
 ```
 
-Commands to run:
+Commands run:
 
 ```bash
 python -m pytest
 python -m ruff check .
-python scripts/run_reconcile.py init-db --db-path exports/reconcile.db
-python scripts/run_reconcile.py seed-demo --db-path exports/reconcile.db
-python scripts/run_reconcile.py rebuild-projections --db-path exports/reconcile.db
-python scripts/run_reconcile.py report trial-balance --db-path exports/reconcile.db --as-of 2026-01-31
-python scripts/run_reconcile.py report income-statement --db-path exports/reconcile.db --from 2026-01-01 --to 2026-01-31
-python scripts/run_reconcile.py report balance-sheet --db-path exports/reconcile.db --as-of 2026-01-31
-python scripts/run_reconcile.py import-bank examples/demo_company/bank_statement.csv --db-path exports/reconcile.db
-python scripts/run_reconcile.py reconcile --db-path exports/reconcile.db --cash-account 1000 --from 2026-01-01 --to 2026-01-31
-python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output
 git status
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+streamlit run dashboard/streamlit_app.py
+```
+
+Results:
+
+```text
+python -m pytest        # 764 passed locally as reported
+python -m ruff check .  # All checks passed locally as reported
+GitHub Actions CI       # passing as reported
+cash_flow.csv           # corrected so JE-004 / Accounts Receivable is operating
+dashboard screenshots   # added under docs/assets/ and embedded in README.md
+exports/reconcile.db    # not committed
 ```
 
 Definition of done:
 
+* README is accurate.
+* Root release files exist.
+* Sample outputs are fake and safe.
+* Dashboard screenshots are included in the README.
+* The stale AR cash-flow sample-output classification is corrected.
 * Tests pass.
 * Ruff passes.
 * CI passes.
-* Manual smoke checks pass.
-* Sample outputs are fake and safe.
-* README is accurate.
-* Docs are accurate.
 * Project State is marked complete.
-* Final git status is clean.
+* Future enhancements are separate from the release-candidate scope.
 
 Suggested commit message:
 
 ```text
-Finalize Reconcile portfolio project
+Finalize Reconcile portfolio release
 ```
 
 ---
@@ -6332,70 +5369,85 @@ Finalize Reconcile portfolio project
 
 Before calling the project complete:
 
-* [ ] Can the project be explained in one sentence?
-* [ ] Does the README show what problem it solves?
-* [ ] Does the quickstart work from a clean clone?
-* [ ] Are sample inputs fake and safe?
-* [ ] Are sample outputs committed if useful?
-* [ ] Is the event-sourcing design documented?
-* [ ] Is the event model documented?
-* [ ] Is the reconciliation algorithm documented?
-* [ ] Are accounting invariants documented?
-* [ ] Do tests pass?
-* [ ] Does ruff pass?
-* [ ] Does coverage pass if configured?
-* [ ] Does CI pass on GitHub?
-* [ ] Are non-goals clear?
-* [ ] Is the repo structure clean?
-* [ ] Can projections be rebuilt from events?
-* [ ] Can trial balance be generated?
-* [ ] Can income statement be generated?
-* [ ] Can balance sheet be generated?
-* [ ] Can bank transactions be imported?
-* [ ] Can reconciliation results be reviewed?
-* [ ] Do match explanations exist?
-* [ ] Does the dashboard launch locally?
-* [ ] Does the dashboard avoid owning business logic?
-* [ ] Is the Project State marked complete?
+* [x] Can the project be explained in one sentence?
+* [x] Does the README show what problem it solves?
+* [x] Does the quickstart work from a clean clone?
+* [x] Are sample inputs fake and safe?
+* [x] Are sample outputs committed if useful?
+* [x] Are dashboard screenshots included?
+* [x] Is the event-sourcing design documented?
+* [x] Is the event model documented?
+* [x] Is the reconciliation algorithm documented?
+* [x] Are accounting invariants documented?
+* [x] Do tests pass?
+* [x] Does ruff pass?
+* [x] Does CI pass on GitHub?
+* [x] Are non-goals clear?
+* [x] Is the repo structure clean?
+* [x] Can projections be rebuilt from events?
+* [x] Can trial balance be generated?
+* [x] Can income statement be generated?
+* [x] Can balance sheet be generated?
+* [x] Can bank transactions be imported?
+* [x] Can reconciliation results be reviewed?
+* [x] Do match explanations exist?
+* [x] Does the dashboard launch locally?
+* [x] Does the dashboard avoid owning business logic?
+* [x] Is the Project State marked complete?
 * [ ] Is the final git status clean?
 
 ---
 
 ## Final completion summary
 
-Status: Not complete.
+Status: Complete.
 
 Final project summary:
 
-* [What was built]
-* [What works]
-* [Tests/quality status]
-* [Portfolio value]
-* [Known future improvements, if any]
+* Reconcile is a local-first Python and SQLite accounting engine with an
+  event-sourced double-entry ledger, immutable journal events, rebuildable
+  projections, point-in-time reports, direct-method cash-flow reporting, bank
+  reconciliation, categorization review, CSV exports, a read-only Streamlit
+  dashboard, dashboard screenshots, and CI.
+* The portfolio MVP is release-candidate ready for review with fake demo data
+  and no real-data, production deployment, authentication, bank API, payroll,
+  tax, invoice, bill-pay, or dashboard-writeback claims.
+* Validation is reported as 764 tests passing locally, Ruff clean, and GitHub
+  Actions CI passing.
+* The final local `git status` is not clean yet because Step 31 files are ready
+  to stage and commit.
+* Future enhancements should be tracked separately from the completed
+  release-candidate scope.
 
 Final commands run:
 
 ```bash
-[commands]
+python -m pytest
+python -m ruff check .
+python scripts/run_reconcile.py export-reports --db-path exports/reconcile.db --output-dir examples/sample_output --from 2026-01-01 --to 2026-01-31 --as-of 2026-01-31
+streamlit run dashboard/streamlit_app.py
+git status
 ```
 
 Final repository state:
 
 ```text
-[clean / not clean / notes]
+Ready to stage and commit Step 31 files.
+Do not commit exports/reconcile.db.
 ```
 
 Known future improvements:
 
+* Manual reconciliation confirmation/rejection workflow.
+* Dashboard writeback for review decisions.
+* Full AR/AP subledger, invoice workflow, or bill-pay workflow.
+* Bank API integrations.
+* Authentication and multi-user deployment.
+* Production hardening.
 * Postgres migration option.
-* More advanced AR/AP subledger.
 * Indirect-method cash flow.
 * Multi-period financial statement comparison.
 * More advanced reconciliation search.
 * Many bank transactions to one ledger movement.
-* Deployment polish.
-* More dashboard interactivity.
-* More complete local ML categorization workflow.
-* Export to Excel.
-* Additional report formats.
+* Export to Excel or additional report formats.
 * Optional Docker setup.

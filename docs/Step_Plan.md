@@ -1,7 +1,6 @@
 # Reconcile Step Plan
 
-This plan tracks the implemented Reconcile build steps and the remaining final
-release cleanup.
+This plan tracks the completed Reconcile portfolio build steps.
 
 ## Current status
 
